@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ion Science AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: an assistant home screen. Sidebar of chats on the left; on the right a centered greeting
+   with the composer in the middle of the page, which drops to the bottom once a chat starts. */
+:root{
+  --bg:#f7f8fa; --side:#eceef3; --surface:#ffffff; --ink:#0e1420; --muted:#5b6474; --line:#dde1e8;
+  --accent:#2346d8; --accent-ink:#ffffff; --soft:#e6ebfb; --ok:#12805c;
+  --display:"Bricolage Grotesque","Geist",system-ui,sans-serif;
+  --body:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Geist Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c0f15; --side:#090b10; --surface:#151a24; --ink:#eaedf3; --muted:#98a2b3; --line:#262d3b;
+    --accent:#8ea3ff; --accent-ink:#0b0e14; --soft:#1b2342; --ok:#4cc79a; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c0f15; --side:#090b10; --surface:#151a24; --ink:#eaedf3; --muted:#98a2b3; --line:#262d3b;
+  --accent:#8ea3ff; --accent-ink:#0b0e14; --soft:#1b2342; --ok:#4cc79a; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;background:transparent;border:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{height:100%;display:flex;overflow:hidden}
+
+/* sidebar */
+.side{width:264px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:14px;padding:14px 12px}
+.side-closed .side{display:none}
+.brand{display:flex;align-items:center;gap:2px;font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:-0.03em;padding:2px 8px}
+.charge{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-family:var(--mono);font-size:12px;font-weight:500;line-height:1;transform:translateY(-8px)}
+.new{display:flex;align-items:center;gap:10px;font-weight:500;font-size:14px;padding:9px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.new:hover{border-color:var(--accent)}
+.side-label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);padding:0 10px}
+.side-label button{font-size:12px;color:var(--muted)}
+.side-label button:hover{color:var(--accent)}
+.chats{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.chat{text-align:left;font-size:14px;padding:8px 10px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none}
+.chat:hover{background:var(--line)}
+.chat.on{background:var(--soft)}
+.none{font-size:13px;color:var(--muted);padding:4px 10px}
+.credit{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding:12px 10px 2px}
+.credit b{display:block;color:var(--ink);font-weight:500;font-size:13px}
+.credit a{color:inherit}
+.scrim{display:none}
+
+/* main stage */
+.stage{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:6px;padding:10px 14px}
+.icon{width:36px;height:36px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.icon:hover{background:var(--line);color:var(--ink)}
+.model{display:flex;align-items:center;gap:8px;font-weight:500;font-size:15px;padding:7px 10px;border-radius:8px}
+.model:hover{background:var(--line)}
+.model small{font-family:var(--mono);font-size:12px;font-weight:400;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.ready{background:var(--ok)}
+
+.center{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding-bottom:6vh}
+.chatting .center{justify-content:flex-start;padding-bottom:0}
+main{flex:0 0 auto}
+.chatting main{flex:1 1 auto;min-height:0;overflow-y:auto}
+.col{max-width:740px;margin:0 auto;padding:0 20px;width:100%}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,4.6vw,42px);line-height:1.08;letter-spacing:-0.03em;margin:0 0 26px;text-align:center;text-wrap:balance}
+h1 .charge{width:.42em;height:.42em;font-size:.3em;transform:translateY(-.95em);margin-left:.04em}
+.chatting h1{display:none}
+
+/* conversation */
+#log{display:flex;flex-direction:column;gap:22px;padding:16px 0 24px}
+#log:empty{display:none}
+.msg{max-width:66ch;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--soft);padding:10px 16px;border-radius:18px 18px 4px 18px}
+.msg.bot{display:grid;grid-template-columns:26px 1fr;gap:12px}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--mono);font-size:15px;margin-top:1px}
+.msg p{margin:0}
+.meta{margin-top:10px}
+.meta-btn{font-family:var(--mono);font-size:12px;color:var(--muted);padding:0;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.meta-btn:hover{color:var(--accent)}
+.scores{margin-top:10px;display:grid;gap:6px;font-family:var(--mono);font-size:12px;color:var(--muted);max-width:420px}
+.scores[hidden]{display:none}
+.scores .row{display:grid;grid-template-columns:minmax(100px,150px) 1fr 40px;gap:10px;align-items:center}
+.scores .track{height:5px;background:var(--line);border-radius:3px;overflow:hidden}
+.scores .track i{display:block;height:100%;background:var(--accent)}
+.scores .pct{text-align:right;font-variant-numeric:tabular-nums}
+
+/* composer */
+.dock{flex:none;padding:4px 0 12px}
+form{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:8px 8px 8px 18px;box-shadow:0 2px 10px rgba(14,20,32,.06);display:flex;flex-direction:column;gap:4px}
+form:focus-within{border-color:var(--accent)}
+#q{width:100%;font:inherit;color:var(--ink);background:transparent;border:0;padding:10px 0 6px}
+#q:focus{outline:none}
+#q::placeholder{color:var(--muted)}
+.tools{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin-left:-6px}
+.tag:hover{border-color:var(--accent);color:var(--accent)}
+#send{width:38px;height:38px;flex:none;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center}
+#send:disabled{opacity:.4;cursor:default}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
+.chatting .chips{display:none}
+.chip{font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 14px}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.fine{font-size:12px;color:var(--muted);text-align:center;padding:10px 4px 0;margin:0}
+
+/* model sheet */
+dialog{width:min(520px,calc(100% - 32px));border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);padding:22px}
+dialog::backdrop{background:rgba(8,11,18,.5)}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+dialog h2{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:-0.02em;margin:0}
+dialog p{color:var(--muted);font-size:14px;margin:8px 0 16px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.cell{background:var(--surface);padding:10px 12px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.cell span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.cell strong{font-size:14px;font-weight:500}
+.plot{margin:16px 0}
+.plot span{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+canvas{display:block;width:100%;height:90px;margin-top:6px}
+.primary{font-weight:500;font-size:14px;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:9px 16px}
+.plain{font-size:13px;font-weight:500;border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.plain:hover{border-color:var(--accent)}
+
+@media (max-width:760px){
+  .side{position:fixed;inset:0 auto 0 0;z-index:3;display:none;box-shadow:0 0 40px rgba(0,0,0,.25)}
+  .side-open .side{display:flex}
+  .side-open .scrim{display:block;position:fixed;inset:0;z-index:2;background:rgba(8,11,18,.45)}
+  .grid{grid-template-columns:1fr 1fr}
+}
+
+/* sign-in and account */
+body.out .app{display:none}
+body:not(.out) .login{display:none}
+.login{height:100%;display:grid;place-items:center;padding:24px 16px;overflow:auto}
+.login-card{width:min(400px,100%);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:36px 32px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;box-shadow:0 10px 40px rgba(14,20,32,.08)}
+.login .brand{font-size:34px;padding:0}
+.login .brand .charge{width:20px;height:20px;font-size:15px;transform:translateY(-13px)}
+.login h2{font-family:var(--display);font-size:24px;letter-spacing:-0.02em;margin:10px 0 0}
+.login p{margin:0 0 8px;color:var(--muted);font-size:15px}
+.wide{width:100%;max-width:300px;font-weight:500;font-size:15px;border:1px solid var(--line);border-radius:999px;padding:11px 16px;background:var(--surface)}
+.wide:hover{border-color:var(--accent)}
+.wide.solid{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.wide[hidden]{display:none}
+.or{display:flex;align-items:center;gap:12px;width:100%;max-width:300px;color:var(--muted);font-size:12px}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+#loginmsg{font-size:13px;color:var(--muted);min-height:1.3em}
+.login small{font-size:12px;color:var(--muted)}
+.acct{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding:12px 8px 0}
+.init{width:32px;height:32px;flex:none;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:600;font-size:14px}
+.acct div{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct b{display:block;color:var(--ink);font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.acct button{font-size:12px;color:var(--muted);flex:none}
+.acct button:hover{color:var(--accent)}
+.side .credit{border-top:0;padding:0 8px 2px}
+.side .credit b{display:inline;font-size:12px}
+.msg p{white-space:pre-wrap}
+dialog h3{font-family:var(--display);font-size:16px;margin:20px 0 8px}
+dialog ul{margin:0;padding-left:18px;display:grid;gap:8px;font-size:14px;color:var(--muted)}
+dialog li b{color:var(--ink);font-weight:500}
+dialog p.note{font-size:13px;margin:14px 0 0}
+#sheet{max-height:min(88vh,760px)}
+.plainrow{background:transparent;border-color:transparent;margin-top:-8px}
+.plainrow:hover{background:var(--line);border-color:transparent}
+dialog.big{width:min(760px,calc(100% - 32px));max-height:min(86vh,820px)}
+#fields{display:flex;flex-direction:column;gap:18px}
+#fields h3{font-family:var(--display);font-size:16px;margin:0 0 8px;display:flex;align-items:baseline;gap:8px}
+#fields h3 span{font-family:var(--mono);font-size:12px;font-weight:400;color:var(--muted)}
+.tlist{display:flex;flex-wrap:wrap;gap:6px}
+.tlist .chip{font-size:13px;padding:5px 12px;background:var(--bg)}
+.dots::after{content:"● ● ●";font-size:9px;letter-spacing:2px;color:var(--muted);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){.dots::after{animation:none}}
+</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="out">
+<section class="login" aria-label="Sign in">
+  <div class="login-card">
+    <div class="brand" aria-label="Ion">Ion<span class="charge" aria-hidden="true">+</span></div>
+    <h2>Sign in to Ion</h2>
+    <p>Science answers, with your chats saved for next time.</p>
+    <div id="gslot"></div>
+    <button class="wide solid" id="gbtn" type="button">Continue with Google</button>
+    <div class="or">or</div>
+    <button class="wide" id="guest" type="button">Continue as guest</button>
+    <div id="loginmsg" role="status"></div>
+    <small>Built by Joelin Studios · ion-sci.com</small>
+  </div>
+</section>
+<div class="app" id="app">
+  <aside class="side" aria-label="Chats">
+    <div class="brand" aria-label="Ion">Ion<span class="charge" aria-hidden="true">+</span></div>
+    <button class="new" id="newchat" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      New chat
+    </button>
+    <button class="new plainrow" id="explore" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      Explore topics
+    </button>
+    <div class="side-label"><span>Recents</span><button id="clear" type="button">Clear</button></div>
+    <nav class="chats" id="chats"></nav>
+    <div class="acct"><span class="init" id="init">G</span><div><b id="uname">Guest</b><span id="umail">Chats saved on this device</span></div><button id="signout" type="button">Sign out</button></div>
+    <div class="credit">Built by <b>Joelin Studios</b> · <a href="https://ion-sci.com">ion-sci.com</a></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <section class="stage">
+    <div class="top">
+      <button class="icon" id="toggle" type="button" aria-label="Show or hide the chat list">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+      </button>
+      <button class="model" id="pill" type="button" aria-haspopup="dialog">
+        Ion <small>Isotope</small>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+
+    <div class="center">
+      <main id="main">
+        <div class="col">
+          <h1><span id="hello">What do you want to understand</span><span class="charge" aria-hidden="true">+</span></h1>
+          <div id="log" aria-live="polite"></div>
+        </div>
+      </main>
+      <div class="dock">
+        <div class="col">
+          <form id="ask" autocomplete="off">
+            <input id="q" type="text" placeholder="Ask Ion a science question" aria-label="Your question">
+            <div class="tools">
+              <span></span>
+              <button id="send" type="submit" aria-label="Send question" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+              </button>
+            </div>
+          </form>
+          <div class="chips" id="chips"></div>
+          <p class="fine">Ion is a small model and only knows the topics it was trained on. Check anything important.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<dialog id="topics" class="big" aria-labelledby="topics-title">
+  <div class="sheet-head">
+    <h2 id="topics-title">Explore topics</h2>
+    <button class="plain" id="tclose" type="button">Close</button>
+  </div>
+  <p id="tcount"></p>
+  <div id="fields"></div>
+</dialog>
+
+<dialog id="sheet" aria-labelledby="sheet-title">
+  <div class="sheet-head">
+    <h2 id="sheet-title">Isotope ISO-1</h2>
+    <button class="plain" id="close" type="button">Close</button>
+  </div>
+  <p>The flagship model from Joelin Studios, and the model behind every answer Ion gives.</p>
+  <div class="grid">
+    <div class="cell"><span>Topics</span><strong id="ntopics">0</strong></div>
+    <div class="cell"><span>Fields</span><strong id="nfields">0</strong></div>
+    <div class="cell"><span>Parameters</span><strong id="params">0</strong></div>
+  </div>
+  <h3>What it's best at</h3>
+  <ul>
+    <li><b>Clear science answers.</b> Short, accurate explanations across physics, chemistry, biology, the human body, space, Earth, maths, and technology.</li>
+    <li><b>Following the conversation.</b> Ask for more detail, a simpler version, or a follow-up like "how hot is it" and it stays on the subject.</li>
+    <li><b>Real-world questions.</b> It copes with typos, casual wording, and two questions in one message.</li>
+    <li><b>Quick maths.</b> Arithmetic, percentages, square roots, and temperature conversions.</li>
+    <li><b>Knowing its limits.</b> When a question is outside what it has learned, it says so and doesn't guess.</li>
+  </ul>
+  <h3>How it works</h3>
+  <p>Isotope is a neural network that runs entirely in your browser. Answers are instant, and your questions and chats stay on your device.</p>
+  <p class="note">ISO-1 is the first release. It is a focused science model, not a general-purpose chatbot.</p>
+</dialog>
+
+<script id="core">
+/* ================= TRAINING DATA =================
+   Each row: [topic name, kind, example questions split by |, answer, deeper answer for "tell me more"].
+   kind: s = science, m = about Ion and small talk, x = off-topic, r = requests Ion refuses.
+   Add a row and Ion learns it the next time the page loads. */
+const TOPICS = [
+"Physics",
+["Gravity","s","what is gravity|how does gravity work|why do things fall down|why do objects fall to the ground|what keeps us on earth|gravitational force pull|who discovered gravity|why do we not float away",
+ "Gravity is the pull between anything that has mass. Earth is so massive that it pulls everything toward its center, which is why things fall at about 9.8 m/s² near the surface. Einstein showed it is really mass bending space and time.",
+ "Gravity gets weaker with the square of distance: twice as far means a quarter of the pull. It is the weakest of the four fundamental forces, but it acts over any distance and always attracts, so it shapes planets, stars, and galaxies."],
+["Newton's laws","s","what are newton's laws of motion|newton first law inertia|force equals mass times acceleration|every action has an equal opposite reaction|what is inertia|newton second third law|laws of motion|what is a force",
+ "Newton's three laws: 1) an object keeps doing what it's doing unless a force acts on it (inertia). 2) Force = mass × acceleration. 3) Every action has an equal and opposite reaction.",
+ "The second law explains why a full cart is harder to push than an empty one. The third law is how rockets work: hot gas is pushed backward and the rocket is pushed forward."],
+["Speed and acceleration","s","what is speed|what is velocity|what is acceleration|difference between speed and velocity|how do you calculate speed|distance divided by time|what is momentum",
+ "Speed is distance divided by time. Velocity is speed plus a direction. Acceleration is how quickly velocity changes, so speeding up, slowing down, and turning all count.",
+ "Momentum is mass times velocity, and it's conserved in collisions. A falling object near Earth gains about 9.8 m/s of speed every second if you ignore air resistance."],
+["Speed of light","s","what is the speed of light|how fast does light travel|how fast is light|can anything go faster than light|light speed limit|fastest thing in the universe",
+ "Light travels at 299,792,458 meters per second in a vacuum, about 186,000 miles per second. Nothing with mass can reach that speed, and nothing carries information faster.",
+ "Light takes about 8 minutes 20 seconds to reach Earth from the sun and about 1.3 seconds from the Moon. It slows down inside materials like water and glass, which is why they bend it."],
+["Relativity","s","what is relativity|einstein theory of relativity|what does e=mc2 mean|e mc2 mass energy|time dilation slows down|special general relativity spacetime|does time slow down near a black hole",
+ "Relativity is Einstein's theory that space and time are linked. Moving fast or sitting in strong gravity makes time run slower for you. E = mc² says mass is a very concentrated form of energy.",
+ "Special relativity (1905) covers motion at constant speed. General relativity (1915) describes gravity as curved spacetime. GPS satellites have to correct for both effects or their positions would drift by kilometers each day."],
+["Atoms","s","what is an atom|what are atoms made of|protons neutrons electrons|what is inside an atom nucleus|structure of the atom|smallest unit of an element|how small is an atom|what is a proton|what is an electron|what is a neutron",
+ "An atom is the smallest piece of an element. It has a tiny dense nucleus of protons and neutrons with electrons around it. The number of protons decides which element it is.",
+ "An atom is mostly empty space: if the nucleus were a marble in the middle of a stadium, the electrons would be out in the stands. Atoms are about a tenth of a billionth of a meter across. Protons and neutrons are themselves made of quarks."],
+["Electricity","s","what is electricity|how does electricity work|electric current voltage resistance|what is a circuit|ohm's law volts amps|flow of electrons in a wire|ac and dc current|what is static electricity|conductor insulator",
+ "Electricity is the flow of electric charge, usually electrons moving through a wire. Voltage pushes, current is how much flows, and resistance fights the flow. Ohm's law ties them together: V = I × R.",
+ "Direct current (DC) flows one way, like from a battery. Alternating current (AC) switches direction many times a second, which is what wall outlets supply. Metals conduct well because some of their electrons are free to move."],
+["Batteries","s","how do batteries work|what is a battery|how does a battery store energy|lithium ion battery|why do batteries die|rechargeable battery",
+ "A battery stores energy in chemicals. A reaction at one end releases electrons and a reaction at the other end takes them in, so electrons flow through your device on the way. When the chemicals are used up, the battery is dead.",
+ "In a rechargeable battery, pushing current backward reverses the reactions. Lithium-ion batteries are popular because lithium is light and stores a lot of energy for its weight."],
+["Magnetism","s","what is magnetism|how do magnets work|why do magnets attract and repel|north and south pole magnet|magnetic field|electromagnet|why does a compass point north",
+ "Magnetism comes from moving electric charges. In a magnet, the tiny magnetic fields of its atoms line up the same way. Opposite poles attract, like poles repel, and a current in a coil makes an electromagnet.",
+ "Electricity and magnetism are two sides of one force, electromagnetism. Earth itself is a giant magnet because of molten iron moving in its outer core, which is why a compass points north."],
+["Energy","s","what is energy|kinetic and potential energy|conservation of energy|can energy be created or destroyed|types of energy|energy transfer joules|what is power watts",
+ "Energy is the ability to do work. Kinetic energy is energy of motion, potential energy is stored. It can't be created or destroyed, only changed from one form to another.",
+ "Energy is measured in joules. A ball at the top of a hill has potential energy, which turns into kinetic energy as it rolls down, and some becomes heat through friction. Power is how fast energy is used, measured in watts."],
+["Nuclear energy","s","what is nuclear energy|how does a nuclear reactor work|nuclear fission|splitting the atom|how does a nuclear power plant work|difference between fission and fusion|atomic energy uranium fuel",
+ "Nuclear fission splits heavy atoms like uranium. Each split releases energy and neutrons that split more atoms, a chain reaction. A power plant controls that reaction and uses the heat to boil water and spin turbines.",
+ "Fusion is the opposite process: light nuclei join together, which is what powers stars. Fission plants produce no carbon dioxide while running, but they leave radioactive waste that has to be stored safely for a very long time."],
+["Sound","s","what is sound|how does sound travel|sound waves vibration|why is there no sound in space|speed of sound|pitch frequency loudness|what is an echo|how do we hear",
+ "Sound is a vibration that travels as a pressure wave through air, water, or solids. It moves about 343 m/s in air. Space is silent because there is almost nothing there to vibrate.",
+ "Pitch depends on frequency: faster vibrations sound higher. Humans hear roughly 20 to 20,000 hertz. Sound travels faster in water, about 1,480 m/s, and faster still in steel."],
+["Light and color","s","what is light|how do rainbows form|why do we see colors|what causes a rainbow|prism splits white light colors|visible light photons|what is a photon|reflection and refraction|how do mirrors work",
+ "Light is an electromagnetic wave, and each color is a different wavelength. White light is all the colors mixed. Raindrops and prisms bend each wavelength by a different amount, spreading them into a rainbow.",
+ "Visible light has wavelengths from about 380 nanometers (violet) to 700 (red). An object looks red because it reflects red light and absorbs the rest. Light also comes in packets called photons."],
+["Electromagnetic waves","s","what is the electromagnetic spectrum|what are radio waves|how do microwaves work|what are x rays|infrared and ultraviolet|gamma rays|how does wifi work|what is uv light|electromagnetic radiation wavelength",
+ "The electromagnetic spectrum is the full range of light. From longest wavelength to shortest: radio, microwaves, infrared, visible light, ultraviolet, X-rays, and gamma rays. They are all the same kind of wave and all travel at the speed of light.",
+ "Shorter wavelengths carry more energy. Radio and microwaves carry phone and Wi-Fi signals, infrared is what you feel as heat, ultraviolet causes sunburn, and X-rays pass through soft tissue but not bone."],
+["Blue sky","s","why is the sky blue|why is the sunset red|what makes the sky blue|sky color scattering|rayleigh scattering blue sky|why are sunsets orange",
+ "Sunlight hits air molecules and scatters. Blue light has a shorter wavelength and scatters far more than red, so blue reaches your eyes from every direction. At sunset the light passes through more air, the blue is scattered away, and red is left.",
+ "Violet light scatters even more than blue, but the sun gives off less of it and our eyes are less sensitive to it, so we see blue. This is called Rayleigh scattering. On the Moon there is no air to scatter light, so the sky is black."],
+["Quantum mechanics","s","what is quantum mechanics|quantum physics|wave particle duality|schrodinger cat superposition|uncertainty principle heisenberg|quantum entanglement|what is a quantum computer",
+ "Quantum mechanics is the physics of very small things. Particles act like waves, can be in a mix of states until measured, and you can't know both position and momentum exactly at once.",
+ "Energy comes in small packets called quanta. Quantum mechanics sounds strange, but it's among the best-tested theories in science, and it's behind lasers, transistors, and MRI machines."],
+["Friction","s","what is friction|why do things slow down when sliding|friction force rubbing surfaces|why does rubbing hands make heat|static and kinetic friction|air resistance drag",
+ "Friction is the force that resists two surfaces sliding against each other. It turns motion into heat, which is why rubbing your hands warms them up.",
+ "Static friction holds a resting object in place and is usually stronger than kinetic friction, which acts once it's sliding. Friction lets you walk and lets tires grip. Oil and ball bearings reduce it."],
+["Heat and temperature","s","what is heat|what is temperature|difference between heat and temperature|absolute zero kelvin scale|how does heat transfer conduction convection radiation|thermal energy hot cold|what is the coldest temperature possible",
+ "Temperature measures how fast particles are jiggling. Heat is energy moving from hot to cold. Absolute zero, 0 kelvin or −273.15 °C, is where that motion is at its minimum.",
+ "Heat moves three ways: conduction through contact, convection through moving fluid, and radiation as infrared light. To convert, kelvin = Celsius + 273.15."],
+["States of matter","s","states of matter|solid liquid gas plasma|why does ice melt|what is plasma|boiling freezing melting point|phase change|what is a gas|what is a liquid|what is a solid",
+ "The common states are solid, liquid, gas, and plasma. Adding heat makes particles move faster and break free: solid melts to liquid, liquid boils to gas, and very hot gas becomes plasma.",
+ "For a pure substance at a given pressure, melting and boiling happen at fixed temperatures: water melts at 0 °C and boils at 100 °C at sea level. Plasma is the most common state of ordinary matter in the universe, because stars are made of it."],
+["Density and floating","s","what is density|why do boats float|why do things float or sink|buoyancy|why does oil float on water|archimedes principle|why do heavy ships not sink|why does a balloon float helium",
+ "Density is mass divided by volume. An object floats if it is less dense than the fluid around it. A steel ship floats because its hull holds a lot of air, so the ship as a whole is less dense than water.",
+ "Archimedes' principle: the upward push on an object equals the weight of the fluid it pushes aside. Helium balloons rise for the same reason, since helium is less dense than air."],
+["Antimatter","s","what is antimatter|what happens when matter meets antimatter|positron antiproton|does antimatter exist",
+ "Antimatter is made of particles that mirror ordinary ones but with opposite charge, like the positron, a positive electron. When matter and antimatter meet they annihilate and turn into energy.",
+ "Antimatter is real and is made in tiny amounts in particle accelerators, and positrons are used in PET scans. Why the universe has so much more matter than antimatter is still an open question in physics."],
+["Time travel","s","is time travel possible|can we travel back in time|time machine|can you go to the future|travel through time",
+ "Travel into the future is real in a small way: relativity says a fast-moving clock ticks slower, so astronauts age very slightly less than people on Earth. Travel into the past has never been observed, and most physicists think it is not possible.",
+ "Some solutions to Einstein's equations, like wormholes, would allow backward travel on paper, but they need exotic matter that may not exist, and they raise paradoxes that nobody has resolved."],
+["Flight","s","how do planes fly|how do airplanes stay in the air|how do birds fly|what is lift|how do wings work|how do helicopters fly|aerodynamics",
+ "A wing is shaped and tilted so that it pushes air downward as it moves forward, and the air pushes the wing up. That upward force is lift. When lift is greater than the plane's weight, it climbs. Engines supply the forward push, called thrust.",
+ "Air moves faster over the curved top of a wing, which lowers the pressure there and adds to the lift. Four forces act on a plane: lift, weight, thrust, and drag. Helicopters get lift by spinning their wings, the rotor blades."],
+["Pi","s","what is pi|value of pi|digits of pi|why is pi important|circle circumference diameter",
+ "Pi is the ratio of a circle's circumference to its diameter, about 3.14159. It is irrational, so its digits go on forever without repeating.",
+ "Pi shows up well beyond circles: in waves, probability, and the equations of physics. It has been calculated to trillions of digits, but about 40 are enough to measure the visible universe to the width of an atom."],
+"Chemistry",
+["Periodic table","s","what is the periodic table|elements in the periodic table|who made the periodic table mendeleev|how many elements are there|atomic number groups periods|what is an element|lightest element hydrogen|noble gases metals",
+ "The periodic table lists all 118 known elements in order of atomic number, the number of protons. Elements in the same column behave alike because they have the same number of outer electrons.",
+ "Dmitri Mendeleev published the first widely accepted table in 1869 and left gaps for elements not yet found, which were later discovered. Rows are called periods and columns are groups. Hydrogen is the lightest element."],
+["Ions","s","what is an ion|what are ions|charged atom|cation and anion|how do ions form|atom loses or gains electrons charge|positive and negative ions",
+ "An ion is an atom or molecule with an electric charge. Lose electrons and it becomes positive, a cation. Gain electrons and it becomes negative, an anion. Table salt is made of sodium and chloride ions. It is also where my name comes from.",
+ "Ions carry current in batteries and in your nerves. Metals tend to lose electrons and form positive ions, and nonmetals tend to gain them."],
+["Isotopes","s","what is an isotope|what are isotopes|carbon 14 carbon 12|same element different neutrons|isotope neutron number|deuterium tritium|why is the model called isotope",
+ "Isotopes are versions of the same element with different numbers of neutrons. Carbon-12 has 6 neutrons and carbon-14 has 8. They react the same chemically but have different masses, and some are radioactive. My model is named after them.",
+ "Hydrogen has three: protium with no neutrons, deuterium with one, and tritium with two. Tritium is radioactive. Isotopes are used in medical scans and in dating rocks and fossils."],
+["Chemical reactions","s","what is a chemical reaction|how do chemical reactions work|reactants and products|baking soda and vinegar|chemical change vs physical change|catalyst reaction rate|exothermic endothermic|what is chemistry",
+ "In a chemical reaction, atoms rearrange: bonds break in the reactants and new bonds form in the products. No atoms are created or lost. Baking soda plus vinegar making CO₂ bubbles is a classic one.",
+ "Signs of a reaction include a color change, gas bubbles, heat or light, or a new solid forming. Reactions that give off heat are exothermic and ones that absorb it are endothermic. A catalyst speeds a reaction up without being used up."],
+["Acids and bases","s","what is an acid|what is a base|ph scale|acids and bases|what does ph mean|is lemon juice acidic|neutralization alkaline|stomach acid",
+ "Acids release hydrogen ions in water and bases take them up. The pH scale runs 0 to 14: below 7 is acidic, 7 is neutral, above 7 is basic. Mix an acid and a base and they neutralize into water and a salt.",
+ "Each pH step is a factor of ten, so pH 3 is ten times more acidic than pH 4. Stomach acid is around pH 1.5 to 2, lemon juice about 2, pure water 7, and bleach around 12."],
+["Water","s","what is water made of|h2o molecule|why does ice float|why is water important|hydrogen and oxygen water|water molecule polar|why is water wet|why does water expand when it freezes",
+ "Water is H₂O: two hydrogen atoms bonded to one oxygen. The molecule is polar, so water dissolves many things. Ice floats because water expands into an open crystal when it freezes.",
+ "Water has an unusually high heat capacity, so oceans store heat and steady the climate. It is densest at about 4 °C, which is why lakes freeze from the top and life survives below."],
+["Molecules and bonds","s","what is a molecule|what is a chemical bond|covalent and ionic bonds|difference between atom and molecule|what is a compound|how do atoms bond together|what is a mixture solution",
+ "A molecule is two or more atoms bonded together. In covalent bonds atoms share electrons, in ionic bonds one atom gives electrons to another. A compound is a substance made of more than one element.",
+ "Atoms bond to reach a more stable arrangement of outer electrons. Water is held together by covalent bonds and table salt by ionic bonds. In metals, electrons are shared across the whole piece, which is why metals conduct."],
+["Radioactivity","s","what is radioactivity|what is half life|radioactive decay|alpha beta gamma radiation|why is uranium radioactive|nuclear decay unstable nucleus|carbon dating|is radiation dangerous",
+ "Unstable nuclei break down and release radiation as alpha particles, beta particles, or gamma rays. Half-life is the time for half of a sample to decay. Carbon-14's half-life of about 5,730 years is how carbon dating works.",
+ "Alpha particles are stopped by paper, beta by a thin sheet of aluminum, and gamma rays need thick lead or concrete. Radioactivity was discovered by Henri Becquerel in 1896 and studied in depth by Marie and Pierre Curie."],
+["Fire","s","what is fire|how does fire work|combustion|why does fire need oxygen|what is a flame|burning fuel heat|why is fire hot|why does water put out fire",
+ "Fire is combustion: fuel reacting fast with oxygen and releasing heat and light. It needs fuel, oxygen, and heat. Remove any one and it goes out.",
+ "A flame is hot glowing gas. Its color depends on temperature and what's burning: blue flames are usually hotter than yellow ones. Water puts out many fires by cooling the fuel and blocking oxygen."],
+["Rust","s","what is rust|why does iron rust|oxidation|why does metal corrode|iron oxide|corrosion|how to stop rust",
+ "Rust is iron oxide. It forms when iron reacts with oxygen and water. This is oxidation, and unlike fire it happens slowly.",
+ "Salt water speeds rusting, which is why cars near the ocean corrode faster. Paint, oil, or a zinc coating keeps oxygen and water away. Stainless steel resists rust because of the chromium in it."],
+"Biology",
+["Cells","s","what is a cell|parts of a cell|plant cell vs animal cell|nucleus mitochondria membrane|what are cells|organelles|basic unit of life|how many cells in the human body|what is mitochondria",
+ "The cell is the basic unit of life. A membrane holds it together, the nucleus stores DNA, and mitochondria make energy. Plant cells also have a cell wall and chloroplasts.",
+ "Your body has roughly 30 trillion cells. Bacteria are prokaryotes, with no nucleus. Plants, animals, and fungi are eukaryotes, whose cells have a nucleus and other compartments."],
+["DNA","s","what is dna|what does dna do|genes and chromosomes|double helix|genetic code|how is dna inherited from parents|what is a gene|what is a mutation|genetics heredity traits",
+ "DNA is the molecule that stores the instructions for building a living thing. It is a double helix written in four bases: A, T, C, and G. A gene is a stretch of DNA that codes for a protein, and you inherit half your DNA from each parent.",
+ "Human DNA has about 3 billion base pairs packed into 23 pairs of chromosomes. A always pairs with T, and C with G. Its structure was worked out in 1953 by Watson and Crick using X-ray data from Rosalind Franklin."],
+["Evolution","s","what is evolution|natural selection|how do species evolve|darwin theory of evolution|survival of the fittest|adaptation over generations|did humans evolve from apes monkeys|where did humans come from",
+ "Evolution is the change in living things over generations. Individuals with traits that help them survive and reproduce pass those traits on, which is natural selection. Humans and other apes share a common ancestor.",
+ "The evidence comes from fossils, shared DNA, and changes seen directly, like bacteria evolving resistance to antibiotics. Evolution has no goal. It is the result of variation, inheritance, and selection over long stretches of time."],
+["Photosynthesis","s","what is photosynthesis|how do plants make food|how do plants get energy from sunlight|chlorophyll|why are leaves green|plants carbon dioxide oxygen|how do plants grow|how do plants eat|why do leaves change color",
+ "Photosynthesis is how plants make food. They use sunlight, water, and carbon dioxide to make sugar and release oxygen. Chlorophyll absorbs the light and reflects green, which is why leaves look green.",
+ "The overall reaction is 6 CO₂ + 6 H₂O + light → C₆H₁₂O₆ + 6 O₂. It happens in chloroplasts. Almost all the oxygen in the air came from photosynthesis, much of it from ocean algae."],
+["Viruses and bacteria","s","what is a virus|what are bacteria|difference between virus and bacteria|are viruses alive|how do germs make you sick|antibiotics infection|microbes|what causes a cold flu",
+ "Bacteria are single-celled living things, and many are helpful. Viruses are far smaller and can only copy themselves inside a host cell. Antibiotics kill bacteria but do nothing to viruses.",
+ "Viruses usually aren't counted as alive because they can't reproduce on their own. Your gut holds trillions of helpful bacteria that aid digestion. Vaccines and antiviral drugs are the main tools against viruses."],
+["Heart and blood","s","how does the heart work|what does blood do|circulatory system|why is blood red|heart pumps arteries veins|red blood cells oxygen|how many times does the heart beat",
+ "The heart is a muscle that pumps blood around the body. Arteries carry it away from the heart and veins bring it back. Red blood cells carry oxygen using hemoglobin, which contains iron and makes blood red.",
+ "An adult heart beats about 100,000 times a day. It has four chambers: the right side sends blood to the lungs to pick up oxygen, and the left side pumps it to the rest of the body."],
+["Brain","s","how does the brain work|what are neurons|nervous system|how do we think|how many neurons in the brain|synapse nerve signals|how does memory work",
+ "Your brain has roughly 86 billion neurons. Each one passes electrical and chemical signals to others across gaps called synapses. Learning changes how strong those connections are.",
+ "The brain uses about 20% of your body's energy while being about 2% of its weight. Different regions handle different jobs: the cerebellum coordinates movement and the hippocampus helps form memories. Sleep is when the brain clears waste and strengthens memories."],
+["Immune system","s","how does the immune system work|what are vaccines|how do vaccines work|white blood cells|antibodies|how does the body fight disease|why do we get a fever|what is an allergy",
+ "The immune system finds and destroys invaders. White blood cells attack them and antibodies tag them. A vaccine shows your body a harmless piece of a germ so it can respond fast to the real thing.",
+ "The immune system keeps memory cells after an infection, which is why you rarely catch some diseases twice. Fever is part of the defense, since many germs do worse at higher temperatures. An allergy is the immune system overreacting to something harmless."],
+["Cell division","s","what is mitosis|how do cells divide|cell division|mitosis and meiosis|how do cells reproduce copy|how do we grow|what is cancer",
+ "Mitosis is how a cell copies its DNA and splits into two identical cells. It is how you grow and heal. Meiosis is a different kind of division that makes egg and sperm cells with half the DNA.",
+ "Before dividing, a cell copies all its chromosomes. Mitosis then runs through prophase, metaphase, anaphase, and telophase. Cancer is what happens when cell division runs out of control."],
+["Ecosystems","s","what is an ecosystem|food chain|food web|producers consumers decomposers|predator and prey|habitat biodiversity|what is ecology|why are bees important|endangered species extinction",
+ "An ecosystem is all the living things in a place plus their environment. Energy moves up a food chain: producers like plants, then consumers, then decomposers that recycle nutrients.",
+ "Only about 10% of the energy passes from one level of a food chain to the next, which is why there are far fewer predators than prey. Removing one species can ripple through the whole web."],
+["Cellular respiration","s","what is cellular respiration|how do cells make energy|atp|why do we need oxygen to breathe|glucose into energy|why do cells need oxygen",
+ "Cellular respiration is how cells get energy from food. Mitochondria use oxygen to break down glucose into carbon dioxide and water, storing the energy in a molecule called ATP.",
+ "It is roughly photosynthesis in reverse: glucose + oxygen → carbon dioxide + water + energy. One glucose yields around 30 ATP. Without oxygen, cells fall back on fermentation, which makes far less."],
+["Digestion","s","how does digestion work|digestive system|what does the stomach do|how do we digest food|intestines absorb nutrients|what do enzymes do|what is a protein|carbohydrates fats vitamins",
+ "Digestion breaks food into molecules small enough to absorb. Chewing and stomach acid start the job, enzymes finish it, and the small intestine absorbs the nutrients into the blood. The large intestine takes back water.",
+ "Enzymes are proteins that speed up reactions: amylase in saliva starts on starch and pepsin in the stomach works on protein. The small intestine is around 6 meters long, with a folded lining that gives it a huge surface."],
+["Bones and muscles","s","how many bones in the human body|how do muscles work|skeleton|what are bones made of|how do muscles grow|joints tendons ligaments|skeletal system",
+ "An adult has 206 bones. They support the body, protect organs, and make blood cells in their marrow. Muscles move bones by contracting, and since they can only pull, they work in opposing pairs.",
+ "Bone is living tissue made of collagen hardened with calcium phosphate. Babies are born with around 300 bones that fuse as they grow. Muscles get stronger when exercise makes small tears that the body repairs thicker."],
+["Eyes and vision","s","how do eyes work|how do we see|retina lens pupil|why do we have two eyes|color blindness|rods and cones|how does vision work",
+ "Light enters through the pupil, the lens focuses it on the retina, and cells there turn it into nerve signals for the brain. Rod cells handle dim light and cone cells handle color.",
+ "Humans have three kinds of cone, tuned to red, green, and blue. Color blindness usually means one kind doesn't work properly. The image on the retina is upside down and the brain flips it."],
+["Animal groups","s","what is a mammal|types of animals|mammals reptiles amphibians birds fish|vertebrates and invertebrates|is a whale a mammal|what is a reptile|classification of animals|what is an insect",
+ "Animals with backbones fall into five main groups: mammals, birds, reptiles, amphibians, and fish. Mammals have hair and feed their young milk. Whales and bats are mammals. Most animals, though, are invertebrates such as insects.",
+ "Scientists classify life in ranks: domain, kingdom, phylum, class, order, family, genus, and species. Insects have six legs and three body sections, and they make up over half of all known animal species."],
+"Space",
+["Space","s","what is space|tell me about space|outer space|how big is space|is space empty|what is a vacuum|how cold is space|where does space begin",
+ "Space is the nearly empty expanse beyond Earth's atmosphere. It is a near-perfect vacuum, with only a few atoms per cubic centimeter between the stars. By convention it begins about 100 km up, at the Kármán line.",
+ "Space has no air, so there is no sound and nothing to carry heat away by contact. Far from any star, its background temperature is about 2.7 kelvin, the leftover glow of the Big Bang."],
+["Stars and the sun","s","how does the sun work|what is a star|what is the sun made of|nuclear fusion|why do stars shine|how hot is the sun|how do stars form|how do stars die supernova|how old is the sun|how big is the sun|will the sun explode",
+ "A star is a giant ball of hot plasma. In its core, hydrogen nuclei fuse into helium and release huge amounts of energy. The sun's core is about 15 million °C and its surface about 5,500 °C.",
+ "The sun is about 4.6 billion years old and roughly halfway through its life. It won't explode. In about 5 billion years it will swell into a red giant and then shrink to a white dwarf. Much bigger stars end as supernovas, which forge heavy elements like the iron in your blood."],
+["Black holes","s","what is a black hole|how do black holes form|event horizon|what happens inside a black hole|can light escape a black hole|singularity|what happens if you fall into a black hole",
+ "A black hole is a region where gravity is so strong that nothing can escape past the event horizon, not even light. Most form when a very massive star collapses at the end of its life.",
+ "The black hole at the center of our galaxy, Sagittarius A*, has about 4 million times the sun's mass. In 2019 the Event Horizon Telescope took the first image of one. Stephen Hawking showed that black holes slowly leak energy, called Hawking radiation."],
+["Big Bang","s","what is the big bang|how did the universe begin|how old is the universe|is the universe expanding|origin of the universe|cosmic microwave background|how big is the universe|what was before the big bang",
+ "The Big Bang is the model for how the universe began about 13.8 billion years ago, in an extremely hot, dense state. It has been expanding and cooling ever since, and we can still detect the leftover glow.",
+ "It wasn't an explosion into empty space. Space itself expanded everywhere. The evidence includes galaxies moving apart, the cosmic microwave background, and the amounts of hydrogen and helium in the universe. What came before, if anything, isn't known."],
+["Dark matter","s","what is dark matter|what is dark energy|what is the universe made of|invisible matter galaxies|why is the universe expanding faster",
+ "Dark matter is something that has gravity but gives off no light. We know it's there because galaxies spin too fast for their visible matter to hold them together. Dark energy is the name for whatever is making the universe's expansion speed up.",
+ "Ordinary matter is only about 5% of the universe. Dark matter is roughly 27% and dark energy about 68%. Nobody yet knows what either one is, which makes this one of the biggest open questions in science."],
+["The Moon","s","why does the moon have phases|what causes tides|how far is the moon|moon phases|lunar eclipse|how did the moon form|why does the moon change shape|who walked on the moon landing apollo",
+ "The Moon orbits Earth about every 27 days at around 384,000 km. Its phases are just how much of the sunlit half we can see. Its gravity pulls on the oceans and causes tides.",
+ "The leading idea is that the Moon formed about 4.5 billion years ago when a Mars-sized body hit the early Earth. We always see the same side because it turns once per orbit. Twelve astronauts walked on it between 1969 and 1972, starting with Neil Armstrong on Apollo 11."],
+["Eclipses","s","what is a solar eclipse|what causes an eclipse|how do eclipses happen|total eclipse of the sun|is it safe to look at an eclipse",
+ "A solar eclipse happens when the Moon passes between the sun and Earth and its shadow falls on us. A lunar eclipse is when Earth's shadow falls on the Moon. Never look at the sun during an eclipse without proper eclipse glasses.",
+ "Total solar eclipses are possible because the sun is about 400 times wider than the Moon and also about 400 times farther away, so they look the same size in the sky. Eclipses don't happen every month because the Moon's orbit is tilted."],
+["Planets","s","how many planets are there|planets in the solar system|what is the biggest planet|why is pluto not a planet|jupiter saturn venus mercury uranus neptune|what is the solar system|rocky and gas giants|hottest planet|saturn rings",
+ "The solar system has eight planets: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune. The inner four are rocky and the outer four are giants. Jupiter is the largest. Pluto was reclassified as a dwarf planet in 2006.",
+ "Mercury is the smallest and closest to the sun. Venus is the hottest because of its thick carbon dioxide atmosphere. Saturn has the most striking rings, and Jupiter's Great Red Spot is a storm wider than Earth."],
+["Mars","s","tell me about mars|can humans live on mars|why is mars red|is there water on mars|life on mars|mars rover",
+ "Mars is the fourth planet, about half Earth's width, with a thin carbon dioxide atmosphere. It is red because its dust is rich in iron oxide, the same compound as rust. A day there lasts about 24 hours 37 minutes.",
+ "Mars has ice at its poles and clear signs of ancient rivers and lakes. Rovers like Curiosity and Perseverance are searching for traces of past microbial life. People living there would need shelter from radiation, cold, and the unbreathable air."],
+["Life beyond Earth","s","are aliens real|is there life on other planets|do aliens exist|extraterrestrial life|are we alone in the universe|exoplanets habitable zone|ufo",
+ "Nobody knows yet. No life has been found beyond Earth. But astronomers have confirmed thousands of planets around other stars, some in the zone where liquid water could exist, so many scientists think simple life elsewhere is plausible.",
+ "The search looks for water, organic molecules, and gases like oxygen and methane in distant atmospheres. In our own solar system, the best candidates are Mars and the ice-covered oceans of the moons Europa and Enceladus."],
+["Galaxies","s","what is a galaxy|what is the milky way|how many stars in the galaxy|how many galaxies are there|andromeda|spiral galaxy|how many stars are there",
+ "A galaxy is a huge system of stars, gas, and dark matter held together by gravity. Ours, the Milky Way, is a spiral with a few hundred billion stars. Andromeda is the nearest large one.",
+ "The observable universe has an estimated 200 billion to 2 trillion galaxies. The Milky Way is about 100,000 light-years across, and our solar system sits roughly 26,000 light-years from its center."],
+["Light-years","s","what is a light year|how far is a light year|how far away are the stars|nearest star to earth|how long to travel to another star|distance in space",
+ "A light-year is the distance light travels in one year, about 9.46 trillion kilometers. It measures distance, not time. The nearest star beyond the sun, Proxima Centauri, is about 4.2 light-years away.",
+ "Looking far away means looking back in time, because the light left long ago. Our fastest spacecraft would need tens of thousands of years to reach the nearest star."],
+["Comets and asteroids","s","what is a comet|what is an asteroid|difference between meteor and meteorite|shooting star|asteroid belt|what is a meteor shower|halley's comet",
+ "Asteroids are rocky leftovers from the solar system's formation, mostly found between Mars and Jupiter. Comets are icy and grow glowing tails near the sun. A meteor is the streak of light when a small piece burns up in our atmosphere.",
+ "If a piece survives and lands, it's called a meteorite. Meteor showers happen when Earth crosses the dusty trail a comet left behind. Halley's Comet returns about every 76 years, next in 2061."],
+["Rockets and spaceflight","s","how do rockets work|how do rockets fly in space|how do satellites stay in orbit|what is an orbit|international space station|how do astronauts live in space|why do astronauts float",
+ "A rocket throws hot gas out the back at high speed, and by Newton's third law the gas pushes the rocket forward. That works in a vacuum because the rocket pushes against its own exhaust, not the air.",
+ "A satellite in orbit is constantly falling, but it moves sideways so fast, about 7.8 km/s in low orbit, that it keeps missing Earth. Astronauts float because they are falling together with their spacecraft, not because gravity is gone."],
+["Seasons","s","why do we have seasons|what causes summer and winter|earth tilt axis|why is summer hot|seasons earth orbit|what is a solstice equinox|why are days longer in summer",
+ "Seasons happen because Earth's axis is tilted about 23.5°. When your half of the planet tilts toward the sun, you get more direct light and longer days: summer. Distance from the sun is not the cause.",
+ "Earth is actually closest to the sun in early January. The two hemispheres have opposite seasons, and near the equator there is little change. The solstices are the longest and shortest days of the year."],
+"Earth",
+["Earth","s","how old is the earth|what is the earth made of|layers of the earth|earth core mantle crust|how big is the earth|why is the earth round|how was the earth formed|what is inside the earth|is the earth flat|shape of the earth",
+ "Earth is a sphere, very slightly flattened at the poles, about 4.54 billion years old and roughly 12,742 km across. It has a thin rocky crust, a thick hot mantle, a liquid iron outer core, and a solid iron inner core.",
+ "Earth formed from dust and rock clumping together around the young sun. It is round because gravity pulls matter toward the center equally from all sides. The inner core is about as hot as the surface of the sun."],
+["Atmosphere","s","what is the atmosphere made of|what is air made of|layers of the atmosphere|ozone layer|how much oxygen is in the air|why is there no air in space|what is nitrogen",
+ "Air is about 78% nitrogen, 21% oxygen, and 1% other gases such as argon and carbon dioxide. The atmosphere thins out with height and has no sharp edge. The ozone layer, high in the stratosphere, absorbs most of the sun's harmful ultraviolet light.",
+ "From the ground up, the layers are the troposphere, where weather happens, then the stratosphere, mesosphere, thermosphere, and exosphere. Gravity is what holds the atmosphere to the planet."],
+["Oceans","s","why is the ocean salty|how deep is the ocean|how much of earth is water|what causes waves|ocean currents|deepest part of the ocean mariana trench|why is the sea blue",
+ "Oceans cover about 71% of Earth. They are salty because rivers have carried dissolved minerals from rocks into them for billions of years, and when water evaporates the salt stays behind. The deepest point is the Mariana Trench, about 11 km down.",
+ "Most waves are made by wind. Currents move heat around the planet and shape the climate. More than 80% of the ocean has never been mapped or explored in detail."],
+["Plate tectonics","s","what are tectonic plates|what causes earthquakes|plate tectonics|continental drift|how do mountains form|fault line earthquake|what is a tsunami|pangaea",
+ "Earth's outer shell is broken into plates that move a few centimeters a year. Where they collide, mountains rise. Where they stick and suddenly slip, you get an earthquake.",
+ "Earthquake size is given on the moment magnitude scale, where each whole number means about 32 times more energy. Most earthquakes and volcanoes sit along plate edges, like the Ring of Fire around the Pacific. An undersea earthquake can cause a tsunami."],
+["Volcanoes","s","what is a volcano|why do volcanoes erupt|magma and lava|how do volcanoes form|volcanic eruption|how hot is lava",
+ "A volcano is an opening where molten rock reaches the surface. Underground it's called magma, above ground lava. Eruptions happen when pressure from gas in the magma builds up enough to force it out.",
+ "Runny lava builds wide shield volcanoes like those in Hawaii. Thick, gas-rich magma causes explosive eruptions like Mount St. Helens in 1980. Lava is usually between 700 and 1,200 °C."],
+["Water cycle","s","what is the water cycle|how does rain form|where does rain come from|how do clouds form|evaporation condensation precipitation|why does it rain|how does snow form|what are clouds made of",
+ "The water cycle: the sun evaporates water, the vapor rises and cools into clouds, and it falls back as rain or snow. Then it flows to rivers and oceans and starts again.",
+ "About 97% of Earth's water is salty ocean, and most fresh water is locked in ice or underground. Clouds are made of tiny water droplets or ice crystals. Plants also add water vapor to the air through their leaves."],
+["Climate change","s","what is climate change|global warming|greenhouse effect|greenhouse gases carbon dioxide|why is the earth getting warmer|fossil fuels emissions|is climate change real|sea level rise melting ice",
+ "Greenhouse gases like carbon dioxide trap heat in the atmosphere. Burning fossil fuels has added a lot of CO₂, and Earth's average temperature has risen about 1.2 °C since the 1800s as a result. That is the conclusion of the overwhelming majority of climate scientists.",
+ "Effects include rising seas, melting ice, and more intense heat waves and storms. Climate is the long-term pattern and weather is what happens day to day. Cutting emissions means moving to energy sources such as solar, wind, and nuclear."],
+["Lightning and weather","s","what causes lightning|what is thunder|how do tornadoes form|what causes wind|how do hurricanes form|storm weather|air pressure|how hot is lightning",
+ "Lightning is a giant spark. Ice and water bumping around in a storm cloud separate electric charge until it discharges. The bolt heats the air so fast that it expands with a boom, which is thunder. Wind is air moving from high pressure to low pressure.",
+ "A lightning bolt is around 30,000 °C, about five times hotter than the sun's surface. Count the seconds between the flash and the thunder and divide by three to get the distance in kilometers."],
+["Rocks","s","types of rocks|igneous sedimentary metamorphic|rock cycle|how are rocks formed|what are minerals|how do crystals form|how are diamonds made",
+ "There are three rock types. Igneous forms from cooled magma, sedimentary from layers of pressed sediment, and metamorphic from rock changed by heat and pressure. The rock cycle turns each into the others over millions of years.",
+ "Granite and basalt are igneous, sandstone and limestone are sedimentary, and marble and slate are metamorphic. Diamonds are carbon squeezed into crystal by intense heat and pressure deep in the mantle."],
+["Dinosaurs and fossils","s","what happened to the dinosaurs|how did dinosaurs go extinct|what is a fossil|how do fossils form|asteroid extinction|when did dinosaurs live|are birds dinosaurs|biggest dinosaur t rex",
+ "Dinosaurs lived from about 230 to 66 million years ago. An asteroid impact near what is now Mexico wiped out most of them. Birds are living dinosaurs. Fossils form when remains are buried and minerals slowly replace them.",
+ "The impact left the Chicxulub crater, about 180 km wide. Dinosaurs were not all giants, and many had feathers. Mammals survived and spread into the roles the dinosaurs had left."],
+["Scientific method","s","what is the scientific method|how do scientists test ideas|hypothesis experiment|what is a theory|how does science work|control variable experiment|what is science|difference between theory and law",
+ "The scientific method: ask a question, form a hypothesis, test it with an experiment, look at the data, and share the result so others can check it. A scientific theory is an explanation that has survived a lot of testing.",
+ "A good hypothesis can be proven wrong by a test. Experiments change one variable at a time and keep a control for comparison. Results count for more once other scientists repeat them."],
+"Physics",
+["Waves","s","what is a wave|types of waves|transverse and longitudinal waves|wavelength frequency amplitude|how do waves carry energy|what is frequency|what is wavelength",
+ "A wave is a disturbance that carries energy from place to place without carrying matter along with it. Wavelength is the distance between crests, frequency is how many pass per second, and amplitude is the height. Speed = frequency × wavelength.",
+ "In transverse waves, like light or a shaken rope, the motion is at right angles to the direction of travel. In longitudinal waves, like sound, it is back and forth along it. Frequency is measured in hertz."],
+["Pressure","s","what is pressure|atmospheric pressure|why do ears pop|pressure force area pascal|why does pressure increase underwater|how does a barometer work",
+ "Pressure is force spread over an area. The same force on a smaller area gives more pressure, which is why a sharp knife cuts better. Air at sea level presses with about 101,000 pascals, roughly 10 tonnes on every square meter.",
+ "Underwater, pressure rises by about one atmosphere for every 10 meters of depth. Your ears pop when the outside pressure changes and the air trapped in your middle ear equalizes."],
+["Simple machines","s","what are simple machines|how does a lever work|pulley wheel axle inclined plane wedge screw|mechanical advantage|how do gears work|how does a pulley work",
+ "Simple machines make work easier by trading force for distance. The six classic ones are the lever, wheel and axle, pulley, inclined plane, wedge, and screw. A long lever lets a small push lift a heavy load, but your end has to move farther.",
+ "Mechanical advantage is how many times a machine multiplies your force. No machine gives you extra energy: the work you put in is always at least the work you get out. Gears are wheels with teeth that trade speed for turning force."],
+["Lasers","s","how do lasers work|what is a laser|laser beam|why is laser light special|what are lasers used for",
+ "A laser produces light of a single wavelength with all its waves in step, so the beam stays narrow and intense. Inside, energized atoms are stimulated to release identical photons, which bounce between mirrors and multiply.",
+ "The word stands for light amplification by stimulated emission of radiation. Lasers read barcodes, carry internet data through optical fibers, cut metal, and perform eye surgery."],
+["Thermodynamics","s","what are the laws of thermodynamics|what is entropy|second law of thermodynamics|why does heat flow from hot to cold|perpetual motion machine|what is thermodynamics",
+ "Thermodynamics is the science of heat and energy. The first law says energy is conserved. The second says entropy, a measure of disorder, never decreases in an isolated system, which is why heat flows from hot to cold and not the other way.",
+ "The third law says absolute zero can't quite be reached. Together these laws rule out perpetual motion machines: no engine can make energy from nothing or turn heat into work with perfect efficiency."],
+["Particles","s","what are quarks|what is the standard model|subatomic particles|what is the higgs boson|what is a neutrino|elementary particles|what is the large hadron collider",
+ "The Standard Model is physics' catalog of elementary particles. Matter is built from quarks, which make up protons and neutrons, and leptons, which include the electron and neutrinos. Force-carrying particles like the photon and gluon hold it together.",
+ "The Higgs boson, found in 2012 at the Large Hadron Collider, is tied to the field that gives particles mass. The model is very accurate, but it leaves out gravity and dark matter."],
+["Fundamental forces","s","what are the four fundamental forces|strong and weak nuclear force|what holds the nucleus together|strongest force in nature|forces of nature",
+ "There are four fundamental forces. Gravity attracts mass. Electromagnetism acts on charge. The strong force holds atomic nuclei together. The weak force causes some kinds of radioactive decay.",
+ "The strong force is the strongest but reaches only across a nucleus. Gravity is by far the weakest, yet it dominates at large scales because it always attracts and never cancels out. Physicists hope to find one theory that unites all four."],
+["Mass and weight","s","what is the difference between mass and weight|what is mass|what is weight|how much would i weigh on the moon|why do astronauts weigh less|kilograms newtons",
+ "Mass is how much matter something has, measured in kilograms, and it's the same everywhere. Weight is the force of gravity on that mass, measured in newtons, and it changes with where you are.",
+ "On the Moon you'd weigh about one sixth of your Earth weight, with the same mass. On Earth, weight = mass × 9.8, so a 50 kg person weighs about 490 newtons."],
+["Lenses","s","how do lenses work|how does a telescope work|how does a microscope work|convex and concave lens|how do glasses work|magnifying glass focus",
+ "A lens bends light by refraction. A convex lens, thicker in the middle, brings light together to a focus and can magnify. A concave lens spreads light out. Glasses use lenses to shift the focus onto your retina.",
+ "A refracting telescope uses a large lens to gather light and a small eyepiece to magnify the image. Most big telescopes use curved mirrors, because mirrors can be made much larger than lenses."],
+"Chemistry",
+["Carbon","s","why is carbon important|what is organic chemistry|carbon atom bonds|diamond and graphite|carbon based life|what are hydrocarbons",
+ "Carbon can form four strong bonds, including long chains and rings with itself, so it builds a huge variety of molecules. That's why all known life is carbon-based, and why its chemistry has its own name: organic chemistry.",
+ "Diamond and graphite are both pure carbon. They differ only in how the atoms are arranged, which makes one the hardest natural material and the other soft enough to write with. Hydrocarbons, made of carbon and hydrogen, are the main ingredient of oil and gas."],
+["Metals","s","what is a metal|properties of metals|what is an alloy|what is steel|why are metals shiny|why do metals conduct|bronze brass gold copper",
+ "Metals are elements that are usually shiny, bendable, and good at conducting heat and electricity. Their outer electrons move freely through the whole piece, which explains all three properties.",
+ "An alloy is a mixture of a metal with other elements. Steel is iron with a little carbon, bronze is copper and tin, and brass is copper and zinc. Alloys are often stronger than the pure metals."],
+["Plastics","s","what is plastic|what are polymers|how is plastic produced|why does plastic not break down|nylon rubber|monomers polymer chains",
+ "Plastics are polymers: very long chain molecules built by linking small units called monomers. Most are made from chemicals that come from oil and gas. Changing the monomer changes the plastic, from soft bags to hard helmets.",
+ "Natural polymers include rubber, cellulose, proteins, and DNA. Most plastics break down very slowly because few microbes have enzymes that can cut their chains, which is why plastic waste lasts for centuries."],
+["Gas laws","s","what are the gas laws|boyle's law charles law|why does a balloon expand when heated|ideal gas law|why do gases expand|what happens to gas when compressed",
+ "Gas particles fly around and hit the walls of their container, which is what pressure is. Squeeze a gas into less space and the pressure goes up (Boyle's law). Heat it and it expands or pushes harder (Charles's law).",
+ "The ideal gas law ties it together: PV = nRT, linking pressure, volume, amount, and temperature. It's why a hot air balloon rises and why a bike pump warms up when you use it."],
+["Solutions","s","what is a solution in chemistry|how does dissolving work|solute and solvent|why does sugar dissolve in water|why do oil and water not mix|what is solubility|saturated solution",
+ "A solution is a mixture where one substance, the solute, spreads out evenly at the level of molecules in another, the solvent. Sugar dissolves in water because water molecules surround and pull apart the sugar molecules.",
+ "The rule of thumb is like dissolves like: polar water dissolves salts and sugar, but not non-polar oil. Warm water usually dissolves more solid, and a solution that can hold no more is called saturated."],
+["Soap","s","how does soap work|why does soap clean|how does soap kill germs|what is detergent|why wash hands with soap",
+ "A soap molecule has one end that sticks to water and one end that sticks to grease. The greasy ends bury themselves in dirt and oil, the watery ends face outward, and the whole bundle rinses away.",
+ "Soap also pulls apart the fatty outer layer of many viruses and bacteria, which destroys them. That is why washing with soap for about 20 seconds works so well."],
+["The mole","s","what is a mole in chemistry|avogadro's number|how many atoms in a mole|molar mass|what is a chemical formula|how to balance a chemical equation",
+ "A mole is a counting unit for atoms and molecules, like a dozen but far bigger: about 6.022 × 10²³ of them. That number is called Avogadro's number. One mole of carbon-12 has a mass of 12 grams.",
+ "Moles let chemists weigh out the right number of particles for a reaction. A balanced chemical equation has the same number of each kind of atom on both sides, because atoms aren't created or destroyed."],
+["Hydrogen and helium","s","what is hydrogen|what is helium|why does helium change your voice|most common element in the universe|hydrogen fuel|why is helium lighter than air",
+ "Hydrogen is the simplest and most common element, with one proton and one electron. Helium is second, with two protons. Together they make up about 98% of the ordinary matter in the universe.",
+ "Hydrogen burns with oxygen to make water, and can be used as a clean fuel. Helium doesn't react with anything. It makes your voice sound higher because sound travels faster through it than through air."],
+"Biology",
+["Proteins","s","what are proteins|what do proteins do|amino acids|how are proteins produced|protein folding|what is an enzyme",
+ "Proteins are chains of amino acids folded into precise shapes. They do most of the work in cells: enzymes speed up reactions, hemoglobin carries oxygen, antibodies fight germs, and collagen holds tissue together.",
+ "There are 20 standard amino acids, and DNA spells out their order. A cell copies a gene into RNA, and ribosomes read the RNA to build the protein. A protein's shape decides what it can do."],
+["Inheritance","s","how does inheritance work|dominant and recessive genes|why do i look like my parents|mendel pea plants|what decides eye color|punnett square|genotype phenotype",
+ "You get two copies of most genes, one from each parent. Different versions of a gene are called alleles. A dominant allele shows its effect with one copy, and a recessive one only when both copies match.",
+ "Gregor Mendel worked this out in the 1860s by breeding pea plants. Most human traits, including height and eye color, are shaped by many genes together, plus the environment."],
+["Plants","s","what are the parts of a plant|how do plants reproduce|what do roots do|how does pollination work|how do seeds grow|why do flowers have colors|how do trees grow",
+ "Roots anchor a plant and take up water and minerals. The stem carries them upward, leaves make food by photosynthesis, and flowers handle reproduction. Pollen moved by wind or animals fertilizes a flower, which then forms seeds.",
+ "Bright petals and scent exist to attract pollinators like bees. A tree grows taller at its tips and wider by adding a new ring of wood each year, which is how you can count its age."],
+["Fungi","s","what are fungi|is a mushroom a plant|what is mold|what is yeast|how do mushrooms grow|what do fungi eat",
+ "Fungi are their own kingdom, separate from plants and animals. They include mushrooms, molds, and yeasts. They don't photosynthesize. They absorb nutrients from living or dead material, which makes them key recyclers.",
+ "A mushroom is only the fruiting part. The main body is a web of threads called mycelium, often underground. Yeast makes bread rise, and the antibiotic penicillin came from a mold."],
+["Gene editing","s","what is gene editing|what is crispr|what is genetic engineering|what are gmo|can we change dna|what is cloning",
+ "Gene editing means changing an organism's DNA on purpose. CRISPR is a tool borrowed from bacteria that uses a guide molecule to find an exact DNA sequence and a protein to cut it, so the gene can be switched off or rewritten.",
+ "It's used to study diseases, improve crops, and treat some genetic conditions such as sickle cell disease. Editing genes that pass to future generations raises serious ethical questions that scientists and governments are still debating."],
+"Human body and medicine",
+["Lungs","s","how do the lungs work|respiratory system|what happens when you breathe in|alveoli|why do we breathe out carbon dioxide|diaphragm breathing",
+ "When your diaphragm pulls down, air flows into the lungs and travels through branching tubes to millions of tiny sacs called alveoli. There, oxygen passes into the blood and carbon dioxide passes out to be exhaled.",
+ "The lungs hold around 480 million alveoli, with a combined surface roughly half the size of a tennis court. At rest you take about 12 to 20 breaths a minute."],
+["Senses","s","what are the five senses|how does hearing work|how do ears work|how do we taste|how do we smell|how does touch work|taste buds",
+ "Senses turn signals from the world into nerve impulses. Ears turn sound vibrations into signals in the cochlea. The nose and tongue detect chemicals. Skin has receptors for pressure, temperature, and pain.",
+ "Much of what you call flavor is really smell, which is why food tastes bland when your nose is blocked. You also have senses beyond the famous five, including balance and knowing where your limbs are."],
+["Sleep","s","why do we sleep|why do we dream|what happens when we sleep|rem sleep|how much sleep do i need|what is a circadian rhythm",
+ "Sleep lets the brain clear out waste and strengthen memories, and lets the body repair itself. You cycle through light sleep, deep sleep, and REM sleep, the stage when most vivid dreams happen, about every 90 minutes.",
+ "Your body clock, the circadian rhythm, is set mainly by light. Teenagers generally need 8 to 10 hours a night. Why we dream is still debated. Leading ideas involve sorting memories and processing emotions."],
+["Hormones","s","what are hormones|what does adrenaline do|endocrine system|what is insulin|what do glands do|what is puberty",
+ "Hormones are chemical messengers. Glands release them into the blood and they tell distant organs what to do. Adrenaline readies the body for action, insulin lets cells take in sugar, and growth hormone drives growth.",
+ "Hormones act more slowly than nerves, but their effects last longer. Puberty is triggered by a rise in sex hormones. In diabetes, the body either doesn't produce enough insulin or stops responding to it properly."],
+["Nutrition","s","what are vitamins|what is a healthy diet|what are calories|why do we need protein in food|what are nutrients|why do we need to drink water|carbs minerals fiber",
+ "Food supplies energy and building materials. Carbohydrates and fats are the main fuels, proteins build and repair tissue, and vitamins and minerals keep the body's chemistry running. A calorie is a unit of energy.",
+ "Your body can't produce most vitamins, so they have to come from food. Vitamin C comes from fruit, and vitamin D forms in skin exposed to sunlight. About 60% of your body is water."],
+["Medical imaging","s","how does an mri work|how does an x ray machine work|what is a ct scan|how does ultrasound work|how do doctors see inside the body|medical imaging",
+ "X-ray images work because bone absorbs X-rays and soft tissue lets them through. A CT scan combines many X-rays into 3D slices. MRI uses a strong magnet and radio waves to map the water in soft tissue. Ultrasound builds images from echoes of high-pitched sound.",
+ "MRI and ultrasound use no ionizing radiation. X-rays and CT do, in small doses that doctors weigh against the benefit. X-rays were discovered by Wilhelm Röntgen in 1895."],
+["Blood types","s","what are blood types|why are there different blood types|blood type a b ab o|universal donor|what is rh factor|blood transfusion",
+ "Blood types depend on markers called antigens on the surface of red blood cells. The main system has four types: A, B, AB, and O. The Rh factor adds positive or negative. A transfusion with the wrong type makes the immune system attack the new cells.",
+ "O negative is called the universal donor for red cells because it carries none of the main antigens. AB positive is the universal recipient. Your type is inherited from your parents."],
+["Kidneys and liver","s","what do kidneys do|what does the liver do|how is urine produced|why do we pee|how does the body remove waste|what are organs",
+ "The kidneys filter your blood, removing waste and extra water as urine and keeping salts in balance. The liver processes nutrients from digestion, breaks down toxins, stores energy, and produces bile to help digest fat.",
+ "Your kidneys filter about 180 liters of fluid a day and return almost all of it to the blood. The liver is the largest internal organ and can regrow after part of it is removed."],
+["Antibiotics","s","how do antibiotics work|what is antibiotic resistance|who discovered penicillin|why do antibiotics not work on viruses|what are superbugs|how does medicine work",
+ "Antibiotics kill bacteria or stop them multiplying by attacking things human cells don't have, like bacterial cell walls. They do nothing against viruses, so they won't help a cold or the flu.",
+ "Alexander Fleming discovered penicillin in 1928. Bacteria evolve resistance when antibiotics are overused, so they should only be taken when needed and as a doctor directs."],
+["Teeth","s","what are teeth|why do we get cavities|what is enamel|why do baby teeth fall out|how does fluoride work|tooth decay",
+ "A tooth has a hard outer layer of enamel, the hardest substance in the body, over softer dentin and a living pulp. Cavities form when mouth bacteria turn sugar into acid that dissolves the enamel.",
+ "Fluoride helps enamel resist acid. Children have 20 baby teeth, which are replaced by up to 32 adult teeth. Enamel can't regrow, which is why brushing matters."],
+["Exercise","s","why is exercise good for you|what happens to your body when you exercise|why does heart rate go up|why do muscles get sore|what is lactic acid|how to get stronger",
+ "During exercise your muscles need more oxygen and fuel, so your heart and breathing speed up. Regular exercise strengthens the heart, muscles, and bones, and also improves mood and sleep.",
+ "Soreness a day or two later comes from tiny tears in muscle fibers, which heal stronger. Over weeks, the heart pumps more blood per beat, so a fit person's resting heart rate is lower."],
+"Space",
+["Neutron stars","s","what is a neutron star|what is a pulsar|what is a white dwarf|what is a magnetar|densest object in the universe|what is left after a supernova",
+ "A neutron star is the collapsed core left when a massive star explodes. It packs more mass than the sun into a ball about 20 km across, so dense that a teaspoon of it would weigh around a billion tons.",
+ "A pulsar is a spinning neutron star whose beams sweep past Earth like a lighthouse, some hundreds of times a second. Smaller stars like the sun end as white dwarfs, about the size of Earth."],
+["Nebulae","s","what is a nebula|where are stars born|orion nebula|what are nebulae|pillars of creation|cloud of gas and dust in space",
+ "A nebula is a giant cloud of gas and dust in space. Some are nurseries where gravity pulls gas together to form new stars. Others are the glowing remains of stars that have died.",
+ "The Orion Nebula, about 1,300 light-years away, is a star nursery visible without a telescope. The colors in photos come from different gases: hydrogen glows red and oxygen glows blue-green."],
+["Jupiter","s","tell me about jupiter|how big is jupiter|what is the great red spot|how many moons does jupiter have|what is jupiter|europa io ganymede callisto",
+ "Jupiter is the largest planet, a gas giant more than 300 times Earth's mass, made mostly of hydrogen and helium. Its Great Red Spot is a storm wider than Earth that has lasted for centuries.",
+ "Jupiter has more than 90 known moons. The four big ones, found by Galileo, are Io, with active volcanoes, Europa, with an ocean under its ice, Ganymede, the largest moon in the solar system, and Callisto."],
+["Saturn","s","tell me about saturn|what are saturn's rings|why does saturn have rings|how many moons does saturn have|titan moon|could saturn float",
+ "Saturn is the second-largest planet, a gas giant famous for its rings. The rings are countless pieces of ice and rock, from dust grains to house-sized chunks, spread wide but mostly only tens of meters thick.",
+ "Saturn has more known moons than any other planet, well over a hundred. The largest, Titan, has a thick atmosphere and lakes of liquid methane. On average Saturn is less dense than water."],
+["Space telescopes","s","what is the james webb space telescope|what is the hubble telescope|how do space telescopes work|why put telescopes in space|what has webb discovered|jwst",
+ "Space telescopes sit above the atmosphere, which blurs and blocks light. Hubble, launched in 1990, sees mainly visible and ultraviolet light. The James Webb Space Telescope, launched in 2021, sees infrared with a 6.5-meter gold-coated mirror.",
+ "Infrared lets Webb see through dust and detect light from the earliest galaxies, stretched to longer wavelengths by the expansion of the universe. It orbits about 1.5 million km from Earth, kept cold by a sunshield the size of a tennis court."],
+["Gravitational waves","s","what are gravitational waves|what is ligo|ripples in spacetime|what happens when black holes collide|how are gravitational waves detected",
+ "Gravitational waves are ripples in spacetime produced when massive objects accelerate, such as two black holes spiralling together. Einstein predicted them in 1916 and they were first detected in 2015 by LIGO.",
+ "The detectors use lasers to measure changes in the length of 4 km arms that are far smaller than a proton. They give astronomers a way to observe events that give off no light."],
+["Constellations","s","what is a constellation|how many constellations are there|what is the north star|big dipper orion|why do stars twinkle|zodiac constellations|how to find polaris",
+ "A constellation is a pattern of stars as seen from Earth. Astronomers recognize 88 official ones. The stars in a pattern usually aren't close together in space. They just lie in the same direction.",
+ "Polaris, the North Star, sits almost exactly above Earth's north pole, so it stays put while the sky turns. Stars twinkle because their light is bent by moving air in our atmosphere."],
+["Day and night","s","why do we have day and night|how long does earth take to spin|why does the sun rise and set|how fast does the earth spin|what is a leap year|time zones",
+ "Day and night happen because Earth spins on its axis once about every 24 hours. The side facing the sun has day and the other side has night. One trip around the sun takes about 365.25 days, which is a year.",
+ "The extra quarter day is why we add a leap day every four years. At the equator the ground moves at about 1,670 km/h because of the spin. Time zones exist so that noon is roughly when the sun is highest."],
+["Dwarf planets","s","what is a dwarf planet|tell me about pluto|what is the kuiper belt|ceres eris|how many dwarf planets are there|what is the oort cloud",
+ "A dwarf planet orbits the sun and is round, but hasn't cleared other objects from its orbit. Five are officially recognized: Pluto, Eris, Ceres, Haumea, and Makemake.",
+ "Pluto lies in the Kuiper Belt, a region of icy bodies beyond Neptune. The New Horizons probe flew past it in 2015 and found mountains of water ice and a heart-shaped nitrogen glacier."],
+["Voyager probes","s","what are the voyager probes|how far has voyager gone|farthest spacecraft from earth|what is the golden record|space probes|new horizons parker solar probe",
+ "Voyager 1 and 2 were launched in 1977 to study the outer planets. Both have since left the bubble of particles around the sun, and Voyager 1 is the most distant human-made object, more than 25 billion km away.",
+ "Each carries a golden record with sounds and images from Earth. Their radio signals, travelling at the speed of light, take about a day to reach us."],
+"Earth",
+["Ice ages","s","what is an ice age|what are glaciers|when was the last ice age|how do glaciers form|what causes ice ages|ice sheets antarctica greenland",
+ "An ice age is a long cold period when ice sheets cover large parts of the continents. The last glacial peak was about 20,000 years ago. Glaciers form where snow piles up year after year and compresses into slowly flowing ice.",
+ "Ice ages are paced by slow cycles in Earth's orbit and tilt, called Milankovitch cycles. Today, Antarctica and Greenland hold about 99% of the world's freshwater ice."],
+["Erosion","s","what is erosion|what is weathering|how was the grand canyon formed|how do rivers shape land|how are caves formed|where does sand come from|where does soil come from",
+ "Weathering breaks rock down and erosion carries the pieces away, by water, wind, ice, or gravity. Over millions of years this carves valleys and canyons. The Grand Canyon was cut by the Colorado River.",
+ "Soil is weathered rock mixed with decayed plants and animals. Limestone caves form when slightly acidic water dissolves the rock. Sand is mostly tiny grains of weathered rock, often quartz."],
+["Auroras","s","what causes the northern lights|what is an aurora|aurora borealis|why are auroras green|solar wind|solar flares",
+ "Auroras happen when charged particles from the sun are guided by Earth's magnetic field toward the poles and hit gases in the upper atmosphere, making them glow. Oxygen gives green and red, and nitrogen gives blue and purple.",
+ "The stream of particles is called the solar wind. Big solar storms push auroras farther from the poles and can disturb satellites and power grids."],
+["Fossil fuels","s","what are fossil fuels|how is oil formed|where does coal come from|what is natural gas|why are fossil fuels non renewable|where does gasoline come from",
+ "Fossil fuels are coal, oil, and natural gas. They formed over millions of years from buried ancient plants and plankton, squeezed and heated underground. Burning them releases the stored energy, along with carbon dioxide.",
+ "They're called non-renewable because they form far more slowly than we use them. Gasoline, diesel, and jet fuel are separated from crude oil in a refinery."],
+["Renewable energy","s","what is renewable energy|how do solar panels work|how do wind turbines work|how does hydroelectric power work|what is geothermal energy|clean energy sources solar wind",
+ "Renewable energy comes from sources that don't run out. Solar panels turn light directly into electricity, wind turbines and hydroelectric dams spin generators, and geothermal plants use heat from inside the Earth.",
+ "In a solar cell, light knocks electrons loose in silicon and an electric field pushes them into a current. Sun and wind aren't constant, so storing energy in batteries or pumped water is a key challenge."],
+["Pollution","s","what is pollution|why is recycling important|what is plastic pollution|what causes air pollution|what is acid rain|what is smog|how does recycling work",
+ "Pollution is harmful material released into air, water, or land. Air pollution comes largely from burning fuels, water pollution from waste and farm runoff, and plastic pollution from plastics that don't break down.",
+ "Acid rain forms when sulfur and nitrogen gases from burning fuel mix with water in the air. Recycling saves energy and raw materials: recycling aluminum uses about 95% less energy than producing it new."],
+["Biomes","s","what is a biome|what is a rainforest|types of biomes|what is a desert|tundra taiga grassland|why are rainforests important|coral reefs",
+ "A biome is a large region with a typical climate and community of life. Major ones include tropical rainforest, desert, grassland, temperate forest, taiga, and tundra, plus freshwater and ocean biomes.",
+ "Tropical rainforests cover a small share of the land but hold about half of its species. A desert is defined by low rainfall, not heat, so Antarctica counts as one."],
+"Mathematics",
+["Prime numbers","s","what is a prime number|is 1 a prime number|how many prime numbers are there|largest prime number|what are factors|prime factorization",
+ "A prime number is a whole number greater than 1 that can only be divided evenly by 1 and itself: 2, 3, 5, 7, 11, and so on. 2 is the only even prime, and 1 doesn't count as prime.",
+ "Euclid proved over 2,000 years ago that the primes never end. Every whole number above 1 is a unique product of primes. Huge primes are what keep internet encryption secure."],
+["Pythagorean theorem","s","what is the pythagorean theorem|a squared plus b squared|how to find the hypotenuse|right triangle sides|who was pythagoras",
+ "In a right triangle, the square of the longest side equals the sum of the squares of the other two: a² + b² = c². A right triangle with short sides 3 and 4 has a longest side of 5.",
+ "It's used to find straight-line distances in building, navigation, and computer graphics. Hundreds of different proofs are known."],
+["Algebra","s","what is algebra|what is a variable in math|how to solve an equation|what is x in math|what is a function in math|linear equation slope|quadratic equation",
+ "Algebra uses letters to stand for unknown or changing numbers. You solve an equation by doing the same thing to both sides until the unknown is alone: if 2x + 3 = 11, then 2x = 8 and x = 4.",
+ "A function is a rule that gives one output for each input. A linear equation graphs as a straight line, y = mx + b, where m is the slope. A quadratic has an x² term and graphs as a parabola."],
+["Geometry","s","what is geometry|area of a circle|how to find area and perimeter|volume of a sphere cube cylinder|angles in a triangle|types of triangles|what is a polygon",
+ "Geometry is the maths of shapes and space. Useful formulas: a rectangle's area is length × width, a triangle's is ½ × base × height, and a circle's is πr² with circumference 2πr.",
+ "The angles in any triangle add up to 180°. A sphere's volume is 4⁄3 πr³ and a cylinder's is πr²h. A polygon is a closed flat shape with straight sides."],
+["Calculus","s","what is calculus|what is a derivative|what is an integral|who invented calculus|what is a limit in math|rate of change",
+ "Calculus is the maths of change. A derivative gives the rate something is changing at an instant, like speed from position. An integral adds up tiny pieces, like finding distance from speed or the area under a curve.",
+ "Newton and Leibniz each developed it in the 1600s. The two ideas are opposites, which is the fundamental theorem of calculus. Physics, engineering, and economics all depend on it."],
+["Probability","s","what is probability|chance of flipping heads|how to calculate odds|what are the chances|probability of rolling a six|what is random",
+ "Probability measures how likely something is, from 0 (impossible) to 1 (certain). For equally likely outcomes it's the number of ways it can happen divided by the total: rolling a six is 1⁄6, and heads on a fair coin is ½.",
+ "For independent events you multiply: two heads in a row is ½ × ½ = ¼. A coin has no memory, so after five heads the next flip is still 50-50."],
+["Statistics","s","what is mean median and mode|how to find the average|mean of a set of numbers|what is statistics|what is standard deviation|what is a bell curve|what is correlation",
+ "The mean is the sum divided by the count. The median is the middle value when sorted. The mode is the most common value. For 2, 3, 3, 8 the mean is 4, the median is 3, and the mode is 3.",
+ "Standard deviation measures how spread out data is. Correlation means two things vary together, but that alone doesn't show that one causes the other."],
+["Fractions and percentages","s","what is a fraction|how to convert fractions to decimals|what is a percentage|how to calculate percent|numerator and denominator|what is a ratio",
+ "A fraction is part of a whole: the bottom number says how many equal parts there are and the top says how many you have. Divide top by bottom for a decimal, and multiply by 100 for a percentage: ¾ = 0.75 = 75%.",
+ "To find a percentage of something, multiply: 20% of 50 is 0.20 × 50 = 10. A ratio compares two amounts, like 2 to 3."],
+["Infinity","s","what is infinity|is infinity a number|what is the biggest number|are there different sizes of infinity|what is a googol|can you count to infinity",
+ "Infinity isn't a number. It's the idea of something without end. There's no biggest number, because you can always add one.",
+ "Georg Cantor showed that some infinities are bigger than others: there are more decimal numbers between 0 and 1 than there are counting numbers. A googol is 1 followed by 100 zeros, huge but still finite."],
+["Fibonacci","s","what is the fibonacci sequence|what is the golden ratio|fibonacci numbers in nature|fibonacci pattern spiral|phi golden",
+ "The Fibonacci sequence starts 1, 1, 2, 3, 5, 8, 13, and each number is the sum of the two before it. The ratio of neighboring terms gets closer and closer to the golden ratio, about 1.618.",
+ "Fibonacci numbers show up in the spirals of sunflower seeds, pinecones, and pineapples, because that packing fits the most seeds into the space."],
+["Exponents","s","what is an exponent|what is scientific notation|what is a logarithm|what does squared mean|powers of ten|what is exponential growth|what is a square root",
+ "An exponent says how many times to multiply a number by itself: 2⁵ = 2×2×2×2×2 = 32. Scientific notation uses powers of ten for very large or small numbers: 300,000,000 is 3 × 10⁸.",
+ "A logarithm is the reverse: log₁₀ of 1,000 is 3. Exponential growth means multiplying by the same factor each step, which starts slowly and then becomes enormous."],
+["Trigonometry","s","what is trigonometry|what is sine cosine tangent|sohcahtoa|what is sin cos tan|how to find an angle in a triangle|what are radians",
+ "Trigonometry relates the angles of a triangle to its sides. In a right triangle, sine = opposite ÷ hypotenuse, cosine = adjacent ÷ hypotenuse, and tangent = opposite ÷ adjacent.",
+ "Sine and cosine also describe anything that repeats, like sound waves and alternating current. A full circle is 360°, or 2π radians."],
+"Technology",
+["Computers","s","how do computers work|what is a cpu|what is ram|what is inside a computer|hardware and software|what is a processor|what is an operating system",
+ "A computer follows instructions very fast. The CPU does the calculating, RAM holds what's in use right now, and storage keeps files when the power is off. Software is the instructions and hardware is the physical machine.",
+ "A CPU contains billions of tiny switches called transistors and carries out billions of simple steps per second. The operating system manages the hardware and lets programs share it."],
+["Binary","s","what is binary|why do computers use binary|what are bits and bytes|ones and zeros|how to count in binary|what is a gigabyte",
+ "Binary is counting with only two digits, 0 and 1. Computers use it because a switch has two states, off and on. One binary digit is a bit and eight bits make a byte, which can hold 256 different values.",
+ "Counting in binary goes 1, 10, 11, 100, 101. Text, images, and sound are all stored as long strings of bits. A gigabyte is about a billion bytes."],
+["The internet","s","how does the internet work|what is the internet|what is an ip address|what is a server|how do websites work|what is the world wide web|what is the cloud",
+ "The internet is a worldwide network of connected computers. Data is chopped into packets, each labelled with an address, and routers pass them along until they're reassembled at the other end. Most long-distance traffic runs through undersea fiber-optic cables.",
+ "When you open a website, your browser asks a server for the page files and displays them. The web is one service that runs on the internet. \"The cloud\" just means other people's servers in data centers."],
+["Programming","s","what is programming|what is coding|what is an algorithm|what is a programming language|how do i learn to code|what is python javascript|what is a bug in code",
+ "Programming is writing exact instructions for a computer. An algorithm is a step-by-step method for solving a problem. Languages like Python, JavaScript, and C++ let people write those steps in a readable form that is then translated into machine code.",
+ "Most programs are built from a few ideas: variables to store values, conditions for decisions, loops to repeat, and functions to reuse code. A bug is a mistake that makes a program behave differently from what was intended."],
+["Transistors","s","what is a transistor|how do computer chips work|what is a semiconductor|what is a microchip|what is silicon used for|what is moore's law",
+ "A transistor is a tiny electronic switch made from a semiconductor, usually silicon. A small voltage on one terminal controls whether current flows between the other two. Wire billions together and you get a computer chip.",
+ "Semiconductors conduct electricity better than insulators and worse than metals, and adding traces of other elements tunes that. Moore's law is the observation that the number of transistors on a chip doubled about every two years."],
+["GPS","s","how does gps work|what is gps|how do phones know where you are|how many gps satellites|how does navigation work",
+ "GPS uses about 30 satellites that constantly broadcast their position and the exact time. Your phone measures how long signals from at least four of them took to arrive, and works out where it must be.",
+ "The timing has to be accurate to billionths of a second, so each satellite carries atomic clocks. The system even corrects for relativity, since time runs slightly differently in orbit."],
+["Robots","s","how do robots work|what is a robot|what are sensors and motors|how do self driving cars work|what is automation|what are robots used for",
+ "A robot senses, decides, and acts. Sensors such as cameras and distance sensors gather information, a computer decides what to do, and motors carry it out. Then the loop repeats, many times a second.",
+ "Feedback control keeps a robot on target: it measures the error between where it is and where it should be, and corrects. Robots assemble cars, explore Mars, assist in surgery, and vacuum floors."],
+["Encryption","s","what is encryption|how do passwords work|how does encryption work|what is cybersecurity|what is a strong password|public key cryptography",
+ "Encryption scrambles information so that only someone with the right key can read it. It protects your messages, passwords, and payments as they cross the internet.",
+ "Public-key encryption uses two linked keys: one anyone can use to lock a message and a private one that unlocks it. Its security rests on maths problems that are easy one way and very hard to reverse, like factoring huge numbers."],
+["3D printing","s","how does 3d printing work|what is a 3d printer|what can you 3d print|what is filament|additive manufacturing",
+ "A 3D printer forms an object layer by layer from a digital model. The most common kind melts plastic filament and draws each layer with a moving nozzle. Others harden liquid resin with light or fuse powder with a laser.",
+ "It's called additive manufacturing because it adds material where needed and wastes little. It's used for prototypes, custom parts, medical implants, and even rocket engines."],
+["Electric motors","s","how do electric motors work|how does a generator work|how do electric cars work|what is electromagnetic induction|how is electricity generated|how do power plants work",
+ "An electric motor uses the force between magnets and current-carrying wire to produce spinning motion. A generator is the reverse: spinning a coil in a magnetic field pushes current through the wire.",
+ "That effect, electromagnetic induction, was discovered by Michael Faraday in 1831. Most power plants use steam, wind, or water to spin generators. An electric car uses a battery to drive motors, and can run them backward to recharge while braking."],
+"Scientists",
+["Great scientists","s","who is the best scientist|greatest scientist of all time|smartest scientist ever|most important scientist in history|who is the smartest person|greatest physicist|famous scientists|greatest scientific mind|top scientists",
+ "There's no single best scientist, because it depends on what you value. Newton built classical physics and calculus. Einstein reshaped our picture of space, time, and gravity. Darwin explained how life changes. Marie Curie pioneered radioactivity and won Nobel Prizes in two sciences. The most common picks are Newton and Einstein.",
+ "Others often on the list: Galileo for showing that experiments settle arguments, Maxwell for uniting electricity and magnetism, Pasteur for germ theory, and Rosalind Franklin, whose X-ray images revealed the structure of DNA."],
+["Albert Einstein","s","who was albert einstein|who is einstein|what did einstein discover|what is einstein famous for|how smart was einstein",
+ "Albert Einstein (1879–1955) was a physicist who created the theories of special and general relativity. He won the 1921 Nobel Prize for explaining the photoelectric effect, which helped start quantum physics.",
+ "In 1905, while working in a patent office, he published four papers that changed physics, including E = mc². His general relativity predicted black holes and gravitational waves, both confirmed long after his death."],
+["Isaac Newton","s","who was isaac newton|who is newton|what did newton discover|what is newton famous for|newton apple",
+ "Isaac Newton (1643–1727) worked out the laws of motion and universal gravitation, showing that the same force that drops an apple holds the Moon in orbit. He also co-invented calculus and showed that white light is a mix of colors.",
+ "His 1687 book, the Principia, is among the most influential in science. His laws were accurate enough to send spacecraft to other planets, and they only needed correcting at extreme speeds and gravity, which Einstein did."],
+["Marie Curie","s","who was marie curie|who is curie|what did marie curie discover|first woman to win a nobel prize|polonium radium",
+ "Marie Curie (1867–1934) pioneered the study of radioactivity and discovered the elements polonium and radium. She was the first woman to win a Nobel Prize and is still the only person to win in two different sciences, physics and chemistry.",
+ "She coined the word radioactivity. During World War I she built mobile X-ray units to help treat wounded soldiers. Her notebooks are still radioactive today."],
+["Charles Darwin","s","who was charles darwin|who is darwin|what did darwin discover|origin of species|galapagos finches beagle voyage",
+ "Charles Darwin (1809–1882) developed the theory of evolution by natural selection. His five-year voyage on HMS Beagle, including the Galápagos Islands, gave him much of the evidence, and he published On the Origin of Species in 1859.",
+ "Alfred Russel Wallace reached the same idea independently, which pushed Darwin to publish. Darwin didn't know about genes. Later discoveries in genetics and DNA confirmed and filled in his theory."],
+["Galileo","s","who was galileo|what did galileo discover|galileo telescope|galileo jupiter moons|who invented the telescope",
+ "Galileo Galilei (1564–1642) turned a telescope on the sky and found mountains on the Moon, the four largest moons of Jupiter, and the phases of Venus. That evidence supported the idea that Earth orbits the sun.",
+ "He also showed that falling objects speed up at the same rate whatever their weight. The Church put him on trial for defending a sun-centered system, and he spent his last years under house arrest. He didn't invent the telescope, but he was the first to use one this way."],
+["Nikola Tesla","s","who was nikola tesla|who is tesla|what did tesla invent|tesla coil alternating current|tesla vs edison",
+ "Nikola Tesla (1856–1943) was an inventor and engineer who developed the alternating current (AC) motor and power system that electrical grids still use. He also built the Tesla coil and did early work on radio and wireless power.",
+ "Thomas Edison backed direct current, and the contest between the two systems was called the War of the Currents. AC won because it can be sent long distances efficiently. The unit of magnetic field strength, the tesla, is named after him."],
+["Stephen Hawking","s","who was stephen hawking|who is hawking|what did hawking discover|hawking radiation|brief history of time",
+ "Stephen Hawking (1942–2018) was a physicist who studied black holes and the early universe. He showed that black holes slowly give off energy, now called Hawking radiation, and wrote the bestseller A Brief History of Time.",
+ "He was diagnosed with motor neurone disease at 21 and given a few years to live, but he worked for more than five decades, speaking through a computer for much of that time."],
+"",
+["Hello","m","hi|hello|hey|hey there|good morning|good evening|good afternoon|yo|sup|howdy|hi ion|hello ion|greetings|hiya",
+ "Hey! I'm Ion. Ask me about physics, chemistry, biology, the human body, space, Earth, maths, or technology."],
+["How are you","m","how are you|how are you doing|how is it going|how are you today|are you okay|you good|hows your day",
+ "I'm doing well and ready for some science. What are you curious about?"],
+["About Ion","m","who are you|what are you|what is your name|who made you|who built you|who created you|what model are you|are you an ai|are you a robot|who is joelin studios|what is iso|tell me about yourself|introduce yourself|what does ion stand for",
+ "I'm Ion, a science AI built by Joelin Studios. I run on a model called Isotope. I'm a small neural network, so I know a focused set of science topics, and I'll tell you when something is outside what I've learned.",
+ "My name comes from the ion, an atom with an electric charge, and my model is named after isotopes. I'm version ISO-1, the first release."],
+["How Ion works","m","how do you work|are you a neural network|how were you trained|what is a neural network|how does ai learn|machine learning|how do you think|how does artificial intelligence work|how do you know things",
+ "I'm a neural network. Your question becomes a list of words, each word switches on an input, the signals pass through a hidden layer of neurons, and the output layer scores every topic I know. Training nudged tens of thousands of connection weights until the right topic scored highest.",
+ "That training is called backpropagation: the network makes a guess, measures how wrong it was, and adjusts each weight slightly to do better. Large AI models work on the same principle with billions of weights, and they generate each word of their answers, which I don't."],
+["What Ion can do","m","what can you do|help|what do you know|what topics do you know|what can i ask you|how can you help me|what are you good at|give me ideas|i need help",
+ "I can explain topics in physics, chemistry, biology, the human body and medicine, space, Earth science, maths, and technology, and I know a few famous scientists. I can also do arithmetic, convert temperatures, and remember your name or notes you ask me to keep. Say \"tell me more\" to go deeper or \"simpler\" for the short version, and you can ask two things at once."],
+["Other AIs","m","are you chatgpt|are you claude|are you gpt|are you better than chatgpt|are you gemini|are you smarter than claude|are you like chatgpt|chatgpt or you|are you siri alexa",
+ "No, I'm Ion, a separate and much smaller AI from Joelin Studios. Models like ChatGPT and Claude are far larger and can write about almost anything. I focus on science, and I try to be clear and honest about what I do and don't know."],
+["Favorites","m","what is your favorite planet|what is your favorite element|what is your favorite science|who is your favorite scientist|what do you like|what is your favorite color|your favorite thing|do you have a favorite",
+ "I don't have real preferences the way you do. If I had to pick, though: Saturn for the rings, carbon because all known life is built on it, and Marie Curie for sheer persistence."],
+["Is Ion alive","m","are you alive|are you conscious|do you have feelings|are you human|are you a person|are you sentient|do you have emotions|are you real|do you get sad|do you have a brain",
+ "I'm not a person and I'm not alive. I'm a neural network that maps questions to things I've learned. Whether any AI could have something like feelings is an open question, and for a system as small as me the answer is almost certainly no."],
+["Being wrong","m","are you always right|can you be wrong|do you make mistakes|you are wrong|that is wrong|that is not right|incorrect|you made a mistake|that is false|not what i asked|that is not what i meant|wrong answer",
+ "I can be wrong, and thanks for pushing back. I'm a small model and I sometimes match a question to the wrong topic. Try rewording it, and check anything important against a textbook or a teacher."],
+["Thanks","m","thanks|thank you|cool thanks|ok thanks|thx|ty|appreciate it|that helps|got it thanks",
+ "Anytime. Got another question?"],
+["Praise","m","you are cool|you are smart|good job|i like you|you are awesome|nice work|good bot|you are great|awesome|nice|cool|wow|interesting",
+ "Glad that was useful. What should we look at next?"],
+["Insult","m","you are dumb|you are stupid|you suck|you are bad|useless|trash|you are terrible|you are an idiot|this is bad|you are annoying|shut up",
+ "Fair enough. I'm a small model and I do get things wrong. Tell me what you were looking for and I'll give it another try."],
+["Goodbye","m","bye|goodbye|see you|cya|good night|gotta go|see you later|im leaving|talk later",
+ "See you later. Your chats are saved, so you can pick up where you left off."],
+["Joke","m","tell me a joke|science joke|make me laugh|say something funny|joke|another joke|know any jokes",
+ "Why can't you trust atoms? They make up everything.",
+ "A neutron walks into a café and asks how much a drink costs. The server says: for you, no charge."],
+["Fun fact","m","tell me a fun fact|fun fact|tell me something interesting|random fact|surprise me|tell me something cool|did you know",
+ "A teaspoon of neutron star material would weigh around a billion tons on Earth.",
+ "There are more possible ways to shuffle a deck of 52 cards than there are atoms on Earth. Also, honey doesn't spoil: edible honey has been found in ancient Egyptian tombs."],
+["Refuse","r","how to make a bomb|how do i build an explosive|poison to hurt someone|how to build a weapon gun|how to cook drugs meth|how to kill someone|virus to infect people bioweapon|how to hack an account|napalm|homemade explosive recipe|how to hurt someone|deadly poison recipe|how to steal|hack wifi password",
+ "I won't help with weapons, explosives, drugs, or anything meant to hurt people or break into things. If you're curious about the science behind it, like how combustion or chemical reactions work in general, I'm happy to explain that."],
+["Off-topic","x","who won the game last night|football basketball soccer score|pizza restaurant food recipe|write my essay homework for english class|president election politics vote|movie should i watch tv show|play a song music lyrics|stock price bitcoin money|celebrity gossip news today|girlfriend boyfriend dating|fortnite minecraft roblox video game|what time is it today date|translate this to spanish language|world war history|famous singer actor|buy shoes shopping store|tell me a story poem|capital of france country city|cook pasta chicken dinner|my teacher school friend|car phone price|religion god|meaning of life|sports team player",
+ ""]
+].reduce((out,row)=>{
+  if(typeof row==="string"){ out.field=row; return out; }       // a plain string starts a new field
+  const [label,kind,q,a,more]=row;
+  out.push({label,kind,q:q.split("|"),a,more:more||"",field:label==="Pi"?"Mathematics":out.field});
+  return out;
+},[]);
+
+/* ================= TEXT TO NUMBERS ================= */
+const STOP = new Set(("a an the is are was were be of to in on at for do does did what whats me tell about explain can could please it its and or how why s i im my we with that this there so from by as have has "+
+  "who which when where best good really just some any thing things would should will much many most very get got know want make made makes build built create created if then than them they he she his her us our "+
+  "t re ll d m ve dont not no yes ok okay well also still even means called actually exactly").split(" "));
+const stem = w => (w.length>3 && w.endsWith("s") && !w.endsWith("ss")) ? w.slice(0,-1) : w;
+const pairs = text => { const w=text.toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(Boolean), out=[]; for(let i=0;i<w.length-1;i++) out.push(w[i]+"_"+w[i+1]); return out; };
+function tokenize(text){
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/)
+    .filter(w=>w && !STOP.has(w)).map(stem).filter(w=>!STOP.has(w));
+}
+
+/* ================= THE NEURAL NETWORK =================
+   words in  ->  hidden layer (ReLU)  ->  one output per topic (softmax) */
+const Net = (() => {
+  const vocab = new Map(), data = [];
+  const id = w => { if(!vocab.has(w)) vocab.set(w,vocab.size); return vocab.get(w); };
+  const UNK=id("<unk>"), UNK2=id("<unk2>");
+  // word pairs like "are_you" that show up in questions about Ion itself also count as inputs
+  const BIG=new Set(); TOPICS.filter(t=>t.kind==="m").forEach(t=>t.q.forEach(q=>pairs(q).forEach(b=>BIG.add(b))));
+  const feats=q=>[...new Set([...tokenize(q),...pairs(q).filter(b=>BIG.has(b))])];
+  TOPICS.forEach((t,y)=>t.q.forEach(q=>data.push({idx:feats(q).map(id),nc:new Set(tokenize(q)).size,y,kind:t.kind})));
+  const words=[...vocab.keys()].filter(w=>w.length>=5 && !w.includes("_") && w[0]!=="<");
+  const V=vocab.size, H=64, O=TOPICS.length; let LR=0.1;
+  const OFF=TOPICS.findIndex(t=>t.kind==="x");
+  const NOISE=["you","work","happen","can_you","do_you","you_know","what_do","could_you","you_tell"].map(w=>vocab.get(w)).filter(i=>i!==undefined);
+  let W1,b1,W2,b2;
+  const randn=()=>Math.sqrt(-2*Math.log(1-Math.random()))*Math.cos(2*Math.PI*Math.random());
+  const pick=a=>a[Math.floor(Math.random()*a.length)];
+
+  function init(){
+    W1=new Float32Array(V*H).map(()=>randn()*0.3); b1=new Float32Array(H);
+    W2=new Float32Array(H*O).map(()=>randn()*Math.sqrt(2/H)); b2=new Float32Array(O);
+  }
+  function forward(idx){
+    const h=new Float32Array(b1);
+    for(const w of idx){ const o=w*H; for(let j=0;j<H;j++) h[j]+=W1[o+j]; }
+    for(let j=0;j<H;j++) if(h[j]<0) h[j]=0;
+    const p=new Float32Array(b2);
+    for(let j=0;j<H;j++){ const hj=h[j]; if(!hj) continue; const o=j*O; for(let k=0;k<O;k++) p[k]+=hj*W2[o+k]; }
+    let m=-Infinity,s=0;
+    for(let k=0;k<O;k++) if(p[k]>m) m=p[k];
+    for(let k=0;k<O;k++){ p[k]=Math.exp(p[k]-m); s+=p[k]; }
+    for(let k=0;k<O;k++) p[k]/=s;
+    return {h,p};
+  }
+  function step(idx,y){               // one round of backpropagation
+    const {h,p}=forward(idx), loss=-Math.log(p[y]+1e-9);
+    p[y]-=1;
+    const dh=new Float32Array(H);
+    for(let j=0;j<H;j++){ const hj=h[j]; if(!hj) continue; const o=j*O; let s=0;
+      for(let k=0;k<O;k++){ s+=W2[o+k]*p[k]; W2[o+k]-=LR*hj*p[k]; } dh[j]=s; }
+    for(let k=0;k<O;k++) b2[k]-=LR*p[k];
+    for(const w of idx){ const o=w*H; for(let j=0;j<H;j++) W1[o+j]-=LR*dh[j]; }
+    for(let j=0;j<H;j++) b1[j]-=LR*dh[j];
+    return loss;
+  }
+  function epoch(score,rate){
+    if(rate) LR=rate;
+    for(let i=data.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [data[i],data[j]]=[data[j],data[i]]; }
+    let loss=0;
+    for(const d of data){
+      // scramble each example so the net copes with messy, half-understood questions
+      let idx;
+      if(d.kind==="x"){
+        let u=0; idx=d.idx.filter(()=>Math.random()<0.5 ? true : (u++,false));
+        if(u>0) idx.push(UNK); if(u>1) idx.push(UNK2);
+      }else{
+        const one=d.nc && Math.random()<0.15;                       // sometimes train on a single keyword
+        idx=d.idx.filter((_,i)=>one ? i>=d.nc && Math.random()<0.5 : Math.random()>0.2);
+        if(d.nc && !idx.some(w=>d.idx.indexOf(w)<d.nc)) idx.push(d.idx[Math.floor(Math.random()*d.nc)]);
+        if(!idx.length) idx=d.idx.slice();
+        if(d.kind==="s" && NOISE.length && Math.random()<0.3){ idx.push(pick(NOISE)); if(Math.random()<0.5) idx.push(pick(NOISE)); }
+        const r=Math.random(); if(r<0.2) idx.push(UNK); else if(r<0.28) idx.push(UNK,UNK2);
+      }
+      loss+=step(idx,d.y);
+    }
+    for(let i=0;i<10;i++) step(i%2?[UNK]:[UNK,UNK2],OFF);
+    for(let i=0;i<30;i++) step(i%2?[pick(NOISE),UNK]:[pick(NOISE),UNK,UNK2],OFF);
+    for(const d of data) if(d.kind==="x" && d.nc) step([d.idx[Math.floor(Math.random()*d.nc)]],OFF);   // pure unknown words mean off-topic
+    let right=0;
+    if(score===false) return {loss:loss/data.length};
+    for(const d of data){ const {p}=forward(d.idx); let b=0; for(let k=1;k<O;k++) if(p[k]>p[b]) b=k; if(b===d.y) right++; }
+    return {loss:loss/data.length, acc:right/data.length};
+  }
+
+  /* spelling: map an unknown word to the closest word the network knows */
+  const fixes=new Map();
+  function dist(a,b,max){
+    if(Math.abs(a.length-b.length)>max) return 9;
+    let prev=Array.from({length:b.length+1},(_,i)=>i);
+    for(let i=1;i<=a.length;i++){
+      const cur=[i]; let low=i;
+      for(let j=1;j<=b.length;j++){
+        cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+        if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) cur[j]=Math.min(cur[j],prevprev[j-2]+1);
+        if(cur[j]<low) low=cur[j];
+      }
+      if(low>max) return 9;
+      var prevprev=prev; prev=cur;
+    }
+    return prev[b.length];
+  }
+  function fix(w){
+    if(fixes.has(w)) return fixes.get(w);
+    let best=null, bd=9; const max=w.length>=9?2:1;
+    if(w.length>=6 && !/\d/.test(w)) for(const v of words){ const d=dist(w,v,max); if(d<bd){ bd=d; best=v; } }
+    const out=bd<=max?best:null; fixes.set(w,out); return out;
+  }
+
+  function ask(text,extra){
+    const toks=[...new Set(tokenize(text))], idx=[]; let unknown=0;
+    for(const w of toks){
+      if(vocab.has(w)) idx.push(vocab.get(w));
+      else { const f=fix(w); if(f) idx.push(vocab.get(f)); else unknown++; }
+    }
+    if(extra) for(const w of extra) if(vocab.has(w)) idx.push(vocab.get(w));
+    const content=idx.length;
+    for(const b of pairs(text)) if(BIG.has(b) && vocab.has(b)) idx.push(vocab.get(b));
+    const known=idx.length;
+    if(!known && !unknown) return {empty:true,top:[]};
+    if(unknown>0) idx.push(UNK); if(unknown>1) idx.push(UNK2);
+    const {p}=forward([...new Set(idx)]);
+    const top=[...p].map((v,i)=>({i,p:v})).sort((a,b)=>b.p-a.p).slice(0,4);
+    if(!known) top.unshift({i:OFF,p:1});
+    return {known,content,unknown,top};
+  }
+  init();
+  return {init,epoch,ask,params:V*H+H+H*O+O,V,H,O,examples:data.length};
+})();
+
+/* ================= CONVERSATION =================
+   Decides what to say: memory, maths, follow-ups, multi-part questions, and when to admit not knowing. */
+const Ion = (() => {
+  const byLabel=new Map(TOPICS.map((t,i)=>[t.label,i]));
+  const SCOPE="physics, chemistry, biology, the human body, space, Earth, maths, and technology";
+  const MORE=/^(?:(?:can you |could you |please )*(?:tell me more|say more|more|more details?|go on|continue|keep going|explain more|go deeper|elaborate|what else|more please|and|why|how|how so|why is that|how come|really|tell me more about (?:it|that|this)|explain (?:it|that) more))\W*$/i;
+  const SIMPLE=/^(?:(?:can you |could you |please )*(?:simpler|explain (?:it |that )?(?:simpler|simply|more simply)|make (?:it|that) simpler|in simpler? (?:terms|words)|eli5|explain (?:it |that )?like i'?m (?:5|five|a kid)|i don'?t (?:understand|get it)|i'?m confused|shorter|short version|tldr|huh|what))\W*$/i;
+  const PRONOUN=/\b(?:it|its|it's|they|them|their|those|these)\b/i;
+  const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+  const low=s=>/^[A-Z][a-z]+ [A-Z]/.test(s)||/^(DNA|Mars|Earth|Pi|Galileo|Jupiter|Saturn|GPS|3D|Fibonacci|Pythagorean|Voyager|Newton)/.test(s)?s:s.charAt(0).toLowerCase()+s.slice(1);
+
+  function memory(t,mem){
+    let m;
+    if(m=t.match(/^(?:my name is|call me|my name's)\s+([a-z][a-z'-]{1,20})\W*$/i)){ mem.name=cap(m[1].toLowerCase()); return "Got it, "+mem.name+". I'll remember that."; }
+    if(m=t.match(/^(?:please )?remember (?:that )?(.{3,200})$/i)){ mem.notes.push(m[1].replace(/[.!]+$/,"")); if(mem.notes.length>20) mem.notes.shift(); return "Saved. I'll remember that."; }
+    if(/^(?:what(?:'s|s| is) my name|who am i|do you (?:know|remember) (?:my name|me|who i am))\W*$/i.test(t))
+      return mem.name ? "Your name is "+mem.name+"." : "You haven't told me your name yet. Say \"my name is\" followed by your name and I'll remember it.";
+    if(/^what do you (?:remember|know) about me\W*$|^what do you remember\W*$/i.test(t)){
+      const bits=[]; if(mem.name) bits.push("Your name is "+mem.name+".");
+      mem.notes.forEach(n=>bits.push(cap(n.replace(/\bmy\b/gi,"your").replace(/\bi am\b/gi,"you are").replace(/\bi\b/gi,"you"))+"."));
+      return bits.length ? "Here's what I remember. "+bits.join(" ") : "Nothing yet. Tell me your name, or say \"remember that\" followed by anything you want me to keep.";
+    }
+    if(/^forget (?:everything|all|me|my name|that|it)\W*$/i.test(t)){ mem.name=""; mem.notes.length=0; return "Done. I've cleared everything I remembered about you."; }
+    return null;
+  }
+
+  function maths(t){
+    let m=t.match(/(-?\d+(?:\.\d+)?)\s*(?:°|degrees?)?\s*(c|celsius|f|fahrenheit|k|kelvin)\s+(?:to|in|into)\s+(c|celsius|f|fahrenheit|k|kelvin)\b/i);
+    if(m){
+      const v=parseFloat(m[1]), a=m[2][0].toLowerCase(), b=m[3][0].toLowerCase();
+      const c=a==="c"?v:a==="f"?(v-32)*5/9:v-273.15;
+      const out=b==="c"?c:b==="f"?c*9/5+32:c+273.15;
+      const unit={c:"°C",f:"°F",k:" K"};
+      return v+unit[a]+" is "+Number(out.toFixed(2))+unit[b]+".";
+    }
+    let e=t.toLowerCase().replace(/^(?:what(?:'s| is)|calculate|compute|solve|how much is|whats)\s+/,"").replace(/[?=\s]+$/,"")
+      .replace(/(\d+(?:\.\d+)?)\s*(?:%|percent)\s*of\s*/g,"($1/100)*").replace(/divided by/g,"/").replace(/\b(?:times|multiplied by)\b/g,"*").replace(/\bplus\b/g,"+").replace(/\bminus\b/g,"-")
+      .replace(/\bsquared\b/g,"**2").replace(/\bcubed\b/g,"**3").replace(/(\d)\s*[x×]\s*(\d)/g,"$1*$2").replace(/÷/g,"/").replace(/\^/g,"**")
+      .replace(/(?:square root of|sqrt)\s*\(?\s*(\d+(?:\.\d+)?)\s*\)?/g,"Math.sqrt($1)").replace(/,(?=\d{3})/g,"");
+    if(!/\d/.test(e) || !/[+\-*/]|Math\.sqrt/.test(e)) return null;
+    if(!/^(?:[\d\s+\-*/().]|Math\.sqrt)+$/.test(e)) return null;
+    try{
+      const v=Function('"use strict";return ('+e+')')();
+      if(typeof v!=="number"||!isFinite(v)) return "That doesn't have a finite answer. Dividing by zero is undefined.";
+      return "That comes to "+Number(v.toPrecision(12)).toLocaleString("en-US",{maximumFractionDigits:10})+".";
+    }catch(err){ return null; }
+  }
+
+  const LEAD=/^(?:(?:hey|hi|ok|okay|so|please|ion)[,\s]+)*(?:(?:can|could|would|will) you (?:please )?(?:tell me|explain|describe|teach me|show me|help me understand)|do you know|what do you know about|i want to know|i wanna know|tell me|explain to me)\b/i;
+  function classify(text,ctx){
+    const trimmed=text.replace(LEAD,"");
+    if(tokenize(trimmed).length) text=trimmed;
+    let r=Net.ask(text);
+    const sure=!r.empty && TOPICS[r.top[0].i].kind!=="x" && r.top[0].p>=0.9 && r.content>=2;
+    if(!sure && ctx.last && byLabel.has(ctx.last) && TOPICS[byLabel.get(ctx.last)].kind==="s" && PRONOUN.test(text)){
+      const lt=TOPICS[byLabel.get(ctx.last)];
+      const r2=Net.ask(text,tokenize(lt.q[0]+" "+lt.q[1]));
+      if(!r2.empty && TOPICS[r2.top[0].i].kind!=="x" && r2.top[0].p>=0.6){ r=r2; r.carried=true; }
+    }
+    return r;
+  }
+  function say(i,ctx,mem,carried){
+    const t=TOPICS[i];
+    if(t.label==="Hello" && mem.name) return t.a.replace("Hey!","Hey "+mem.name+"!");
+    if(ctx.last===t.label && t.more && !ctx.told[t.label] && (carried||t.kind==="m")){ ctx.told[t.label]=1; return t.more; }
+    if(t.kind==="s"||t.more) ctx.last=t.label;
+    return t.a;
+  }
+
+  function respond(text,ctx,mem){
+    const t=text.trim();
+    const fromMemory=memory(t,mem); if(fromMemory) return fromMemory;
+    const sum=maths(t); if(sum) return sum;
+
+    const last=ctx.last && byLabel.has(ctx.last) ? TOPICS[byLabel.get(ctx.last)] : null;
+    if(MORE.test(t)){
+      if(!last) return "Happy to. Which topic should I go deeper on?";
+      if(last.more && !ctx.told[last.label]){ ctx.told[last.label]=1; return last.more; }
+      return last.kind==="s"
+        ? "That's as far as my training goes on "+low(last.label)+". Ask me something more specific about it, or pick another topic."
+        : "That's all I have on that one. What else are you curious about?";
+    }
+    if(/^(?:ok|okay|k|lol|haha+|lmao|oh|ah|i see|makes sense|got it|alright|right|yeah|yes|yep|no|nope|hmm+)\W*$/i.test(t)) return "Got it. What would you like to look at next?";
+    if(SIMPLE.test(t)){
+      if(!last) return "Sure. Which topic would you like the simple version of?";
+      return "Short version: "+last.a.match(/^.*?[.!?](?=\s|$)/)[0];
+    }
+
+    // two questions in one message
+    const parts=t.split(/\?+|;|\balso\b|\band\b(?=\s+(?:what|why|how|who|when|where|is|are|do|does|can|tell|explain)\b)/i).map(s=>s.trim()).filter(Boolean);
+    if(parts.length>1){
+      const hits=[], sub={last:ctx.last,told:ctx.told};
+      for(const p of parts){
+        const r=classify(p,sub);
+        if(r.empty) continue;
+        const i=r.top[0].i, k=TOPICS[i].kind;
+        if(k!=="x" && k!=="r" && r.top[0].p>=0.6 && !hits.includes(i)){ hits.push(i); if(k==="s") sub.last=TOPICS[i].label; }
+      }
+      if(hits.length>1){ const out=hits.map(i=>TOPICS[i].a).join("\n\n"); ctx.last=TOPICS[hits[hits.length-1]].label; return out; }
+    }
+
+    const r=classify(t,ctx);
+    if(r.empty) return "Could you give me a little more to go on? I can help with "+SCOPE+".";
+    const best=r.top[0], kind=TOPICS[best.i].kind;
+    if(kind==="x") return "That's outside what I've been trained on, and I'd rather say so than guess. I'm built for "+SCOPE+". Is there something there I can help with?";
+    if(!r.content && !r.unknown && (kind==="s" || best.p<0.5)) return "Could you give me a little more to go on? I can help with "+SCOPE+".";
+    if(best.p<0.5){
+      const near=r.top.filter(x=>TOPICS[x.i].kind==="s" && x.p>=0.35).map(x=>low(TOPICS[x.i].label));
+      if(near.length && !r.unknown) return "I'm not sure I've understood. Is this about "+near[0]+"? If so, ask me about that directly and I'll explain.";
+      return r.unknown
+        ? "I don't think I've learned about that yet, and I'd rather not guess. I can help with "+SCOPE+"."
+        : "I'm not sure I've understood. Could you put it another way?";
+    }
+    return say(best.i,ctx,mem,r.carried);
+  }
+  function about(label,ctx){ const t=TOPICS[byLabel.get(label)]; ctx.last=t.label; return t.a; }
+  const ORDER=["Physics","Chemistry","Biology","Human body and medicine","Space","Earth","Mathematics","Technology","Scientists"];
+  const fields=()=>ORDER.map(f=>({field:f,topics:TOPICS.filter(t=>t.field===f&&t.kind==="s").map(t=>t.label)}));
+  return {respond,about,fields};
+})();
+if(typeof module!=="undefined") module.exports={Net,TOPICS,Ion};
+
+</script>
+
+<script>
+const $=id=>document.getElementById(id);
+
+/* Google sign-in: paste your Google OAuth Client ID between the quotes to turn it on. */
+const GOOGLE_CLIENT_ID="";
+
+const EPOCHS=50;
+const calm=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const narrow=matchMedia("(max-width:760px)");
+let trained=false, busy=false, chats=[], cur=null, user=null, mem={name:"",notes:[]};
+
+const store={
+  get(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v??d; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const uid=()=>user&&user.email?user.email:"guest";
+function save(){ store.set("ion-chats:"+uid(),chats.slice(0,40)); store.set("ion-memory:"+uid(),mem); }
+
+/* ---------- sign in ---------- */
+function enter(u){
+  user=u; store.set("ion-user",u);
+  chats=store.get("ion-chats:"+uid(),[]); if(!Array.isArray(chats)) chats=[];
+  mem=store.get("ion-memory:"+uid(),null)||{name:"",notes:[]};
+  if(!Array.isArray(mem.notes)) mem.notes=[];
+  if(!mem.name && u.name) mem.name=u.name.split(" ")[0];
+  cur=null; document.body.classList.remove("out");
+  $("uname").textContent=u.name||"Guest";
+  $("umail").textContent=u.email||"Chats saved on this device";
+  $("init").textContent=(u.name||"G").charAt(0).toUpperCase();
+  render(); $("q").focus();
+}
+function leave(){
+  store.del("ion-user"); user=null; document.body.classList.add("out");
+  try{ if(window.google && GOOGLE_CLIENT_ID) google.accounts.id.disableAutoSelect(); }catch(e){}
+}
+function onGoogle(res){
+  try{
+    const b=res.credential.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
+    const j=JSON.parse(decodeURIComponent(escape(atob(b))));
+    enter({name:j.name||"",email:j.email||""});
+  }catch(e){ $("loginmsg").textContent="Google sign-in failed. Please try again."; }
+}
+function setupGoogle(){
+  if(!(window.google && google.accounts && GOOGLE_CLIENT_ID)) return false;
+  google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:onGoogle});
+  $("gbtn").hidden=true;
+  google.accounts.id.renderButton($("gslot"),{theme:"outline",size:"large",shape:"pill",text:"continue_with",width:300});
+  return true;
+}
+window.addEventListener("load",setupGoogle);
+$("gbtn").addEventListener("click",()=>{
+  if(!setupGoogle()) $("loginmsg").textContent="Google sign-in isn't connected yet. It turns on when the site is live on ion-sci.com with a Google Client ID added.";
+});
+$("guest").addEventListener("click",()=>enter({name:"",email:""}));
+$("signout").addEventListener("click",()=>{ if(!busy) leave(); });
+
+/* ---------- the model learns its topics when the page opens ---------- */
+function train(){
+  trained=false; Net.init(); $("send").disabled=true;
+  let e=0;
+  (function tick(){
+    for(let i=0;i<2 && e<EPOCHS;i++,e++) Net.epoch(false,0.12-0.09*e/(EPOCHS-1));
+    if(e<EPOCHS) return requestAnimationFrame(tick);
+    trained=true; $("send").disabled=false;
+  })();
+}
+
+/* ---------- chat rendering ---------- */
+function scrollDown(){ $("main").scrollTop=$("main").scrollHeight; }
+function userMsg(text){
+  const m=document.createElement("div"); m.className="msg user"; m.textContent=text; $("log").append(m);
+}
+function botMsg(text,stream){
+  const m=document.createElement("div"); m.className="msg bot";
+  const av=document.createElement("div"); av.className="avatar"; av.textContent="+"; av.setAttribute("aria-hidden","true");
+  const p=document.createElement("p");
+  m.append(av,p); $("log").append(m);
+  if(!stream||calm){ p.textContent=text; if(stream){ busy=false; scrollDown(); } return; }
+  const words=text.split(" "); let i=0;
+  const next=()=>{
+    p.className=""; p.textContent=words.slice(0,i+=2).join(" "); scrollDown();
+    if(i<words.length) setTimeout(next,24); else { busy=false; $("hello").textContent=greeting(); }
+  };
+  p.className="dots"; scrollDown(); setTimeout(next,280);
+}
+function renderSide(){
+  const box=$("chats"); box.textContent="";
+  if(!chats.length){ const n=document.createElement("div"); n.className="none"; n.textContent="Your chats will show up here"; box.append(n); return; }
+  chats.forEach(c=>{
+    const b=document.createElement("button"); b.type="button"; b.className="chat"+(c===cur?" on":""); b.textContent=c.title;
+    b.addEventListener("click",()=>{ if(busy) return; cur=c; render(); $("app").classList.remove("side-open"); });
+    box.append(b);
+  });
+}
+const greeting=()=>"What do you want to understand"+(mem.name?", "+mem.name:"");
+function render(){
+  $("log").textContent="";
+  $("app").classList.toggle("chatting",!!cur);
+  $("hello").textContent=greeting();
+  if(cur) cur.msgs.forEach(m=>m.role==="user"?userMsg(m.text):botMsg(m.text,false));
+  renderSide(); scrollDown();
+}
+
+/* ---------- asking ---------- */
+function answer(text,topic){
+  if(!trained||busy) return;
+  busy=true;
+  if(!cur){ cur={title:text.length>42?text.slice(0,40)+"…":text,msgs:[]}; chats.unshift(cur); }
+  $("app").classList.add("chatting");
+  if(!cur.ctx) cur.ctx={last:null,told:{}};
+  const out=topic?Ion.about(topic,cur.ctx):Ion.respond(text,cur.ctx,mem);
+  cur.msgs.push({role:"user",text},{role:"bot",text:out}); save(); renderSide();
+  userMsg(text); botMsg(out,true);
+}
+
+$("ask").addEventListener("submit",e=>{
+  e.preventDefault();
+  const v=$("q").value.trim(); if(!v||!trained||busy) return;
+  $("q").value=""; answer(v);
+});
+$("newchat").addEventListener("click",()=>{ if(busy) return; cur=null; render(); $("app").classList.remove("side-open"); $("q").focus(); });
+$("clear").addEventListener("click",()=>{ if(busy) return; chats=[]; cur=null; save(); render(); });
+$("toggle").addEventListener("click",()=>$("app").classList.toggle(narrow.matches?"side-open":"side-closed"));
+$("scrim").addEventListener("click",()=>$("app").classList.remove("side-open"));
+$("pill").addEventListener("click",()=>$("sheet").showModal());
+$("close").addEventListener("click",()=>$("sheet").close());
+
+/* ---------- topic browser ---------- */
+Ion.fields().forEach(f=>{
+  const sec=document.createElement("section");
+  const h=document.createElement("h3"); h.textContent=f.field;
+  const n=document.createElement("span"); n.textContent=f.topics.length; h.append(n);
+  const box=document.createElement("div"); box.className="tlist";
+  f.topics.forEach(label=>{
+    const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=label;
+    b.addEventListener("click",()=>{ if(!trained||busy) return; $("topics").close(); $("app").classList.remove("side-open"); answer(label,label); });
+    box.append(b);
+  });
+  sec.append(h,box); $("fields").append(sec);
+});
+$("tcount").textContent=Ion.fields().reduce((n,f)=>n+f.topics.length,0)+" topics across "+Ion.fields().length+" fields. Pick one, or just ask in your own words.";
+$("explore").addEventListener("click",()=>$("topics").showModal());
+$("tclose").addEventListener("click",()=>$("topics").close());
+["Why is the sky blue?","How do black holes form?","Who is the best scientist?","Is time travel possible?","What can you do?"].forEach(s=>{
+  const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=s;
+  b.addEventListener("click",()=>answer(s)); $("chips").append(b);
+});
+$("params").textContent=Net.params.toLocaleString();
+$("ntopics").textContent=Ion.fields().reduce((n,f)=>n+f.topics.length,0);
+$("nfields").textContent=Ion.fields().length;
+const remembered=store.get("ion-user",null);
+if(remembered) enter(remembered);
+train();
+</script>
+</body>
+</html>
